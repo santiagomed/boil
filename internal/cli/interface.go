@@ -6,10 +6,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/santiagomed/boilerplate/internal/generator"
-	"github.com/santiagomed/boilerplate/internal/llm"
-	"github.com/santiagomed/boilerplate/internal/tempdir"
-	"github.com/santiagomed/boilerplate/pkg/utils"
+	"github.com/santiagomed/boil/internal/generator"
+	"github.com/santiagomed/boil/internal/llm"
+	"github.com/santiagomed/boil/internal/tempdir"
+	"github.com/santiagomed/boil/pkg/utils"
 )
 
 type model struct {
@@ -78,7 +78,7 @@ func (m model) View() string {
 	switch m.state {
 	case "input":
 		return fmt.Sprintf(
-			"Welcome to Boilerplate CLI!\n\n%s\n\n%s",
+			"Welcome to Boil!\n\n%s\n\n%s",
 			m.textInput.View(),
 			"(press enter to generate project or esc to quit)",
 		)
