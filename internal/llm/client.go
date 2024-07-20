@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 
 	"boil/internal/config" // Update this import path
 	"boil/internal/utils"
@@ -47,27 +46,22 @@ func (c *Client) GenerateFileTree(projectDetails string) (string, error) {
 // DetermineFileOrder determines the order in which files should be created
 func (c *Client) DetermineFileOrder(fileTree string) ([]string, error) {
 	prompt := getFileOrderPrompt(fileTree)
-	response, err := c.getCompletion(prompt, "text")
+	response, err := c.getCompletion(prompt, "json_object")
 	if err != nil {
 		return nil, fmt.Errorf("failed to determine file order: %w", err)
 	}
 
-	lines := strings.Split(response, "\n")
-	var fileOrder []string
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" && !strings.HasPrefix(strings.TrimSpace(line), "#") {
-			parts := strings.SplitN(strings.TrimSpace(line), ".", 2)
-			if len(parts) > 1 {
-				fileOrder = append(fileOrder, strings.TrimSpace(parts[1]))
-			}
-		}
+	var fileOrder map[string][]string
+	err = json.Unmarshal([]byte(response), &fileOrder)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing file order: %w", err)
 	}
 
 	if len(fileOrder) == 0 {
 		return nil, fmt.Errorf("no valid file paths found in the response")
 	}
 
-	return fileOrder, nil
+	return fileOrder["files"], nil
 }
 
 // GenerateFileOperations generates file operations for creating a specific file
@@ -78,7 +72,7 @@ func (c *Client) GenerateFileOperations(projectDetails, fileTree string) ([]util
 		return nil, fmt.Errorf("failed to generate file operations: %w", err)
 	}
 
-	var operations []utils.FileOperation
+	var operations map[string][]utils.FileOperation
 	err = json.Unmarshal([]byte(response), &operations)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing file operations: %w", err)
@@ -88,7 +82,7 @@ func (c *Client) GenerateFileOperations(projectDetails, fileTree string) ([]util
 		return nil, fmt.Errorf("no file operations generated")
 	}
 
-	return operations, nil
+	return operations["operations"], nil
 }
 
 // GenerateFileContent generates content for a specific file

@@ -1,115 +1,164 @@
 package llm
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"boil/internal/config"
 	"boil/internal/utils"
 )
 
-func TestLlm(t *testing.T) {
+type Cache struct {
+	outPath string
+	t       *testing.T
+}
+
+func NewCache(outPath string, t *testing.T) *Cache {
+	return &Cache{
+		outPath: outPath,
+		t:       t,
+	}
+}
+
+func (c *Cache) Get(filename string) (string, error) {
+	path := filepath.Join(c.outPath, filename)
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("cache miss: %v", err)
+	}
+	c.t.Logf("Cache hit: %s", path)
+	return string(content), nil
+}
+
+func (c *Cache) Set(filename string, content string) error {
+	path := filepath.Join(c.outPath, filename)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		return fmt.Errorf("error writing cache: %v", err)
+	}
+	c.t.Logf("Cache set: %s", path)
+	return nil
+}
+
+func TestLlmSequential(t *testing.T) {
+	t.Log("Starting TestLlmSequential")
+
 	cfg, err := config.LoadConfig("")
 	if err != nil {
 		t.Fatalf("Error loading config: %v", err)
 	}
+	t.Log("Config loaded successfully")
+
 	llmClient := NewClient(cfg)
+	t.Log("LLM client initialized")
 
 	outPath := "tmp/"
-
-	// Create  directory for test output
 	err = os.MkdirAll(outPath, 0755)
 	if err != nil {
 		t.Fatalf("Error creating temporary directory: %v", err)
 	}
+	t.Logf("Created output directory: %s", outPath)
+
+	cache := NewCache(outPath, t)
 
 	projectDesc := "Create a simple web server in Express that returns 'Hello, World!' when '/' is accessed."
+	t.Logf("Project description: %s", projectDesc)
 
-	tests := []struct {
-		name     string
-		llmFunc  interface{}
-		input    interface{}
-		filename string
-	}{
-		{"ProjectDetails", llmClient.GenerateProjectDetails, projectDesc, "project_details.md"},
-		{"FileTree", llmClient.GenerateFileTree, "", "file_tree.txt"},
-		{"FileOrder", llmClient.DetermineFileOrder, "", "file_order.txt"},
-		{"FileOperations", llmClient.GenerateFileOperations, "", "file_operations.json"},
-		{"FileContent", llmClient.GenerateFileContent, "", "file_content.txt"},
+	// Step 1: Generate Project Details
+	t.Log("Step 1: Generating Project Details")
+	projectDetails, err := cache.Get("project_details.md")
+	if err != nil {
+		projectDetails, err = llmClient.GenerateProjectDetails(projectDesc)
+		if err != nil {
+			t.Fatalf("ProjectDetails error: %v", err)
+		}
+		if err := cache.Set("project_details.md", projectDetails); err != nil {
+			t.Logf("Failed to cache project details: %v", err)
+		}
 	}
+	t.Log("Project details generated successfully")
 
-	var projectDetails, fileTree string
+	// Step 2: Generate File Tree
+	t.Log("Step 2: Generating File Tree")
+	fileTree, err := cache.Get("file_tree.txt")
+	if err != nil {
+		fileTree, err = llmClient.GenerateFileTree(projectDetails)
+		if err != nil {
+			t.Fatalf("FileTree error: %v", err)
+		}
+		if err := cache.Set("file_tree.txt", fileTree); err != nil {
+			t.Logf("Failed to cache file tree: %v", err)
+		}
+	}
+	t.Log("File tree generated successfully")
+
+	// Step 3: Determine File Order
+	t.Log("Step 3: Determining File Order")
+	fileOrderStr, err := cache.Get("file_order.json")
 	var fileOrder []string
-	fileContent := make(map[string]string)
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var result interface{}
-			var err error
-
-			switch tt.name {
-			case "ProjectDetails":
-				result, err = tt.llmFunc.(func(string) (string, error))(projectDesc)
-			case "FileTree":
-				result, err = tt.llmFunc.(func(string) (string, error))(projectDetails)
-			case "FileOrder":
-				result, err = tt.llmFunc.(func(string) ([]string, error))(fileTree)
-			case "FileOperations":
-				result, err = tt.llmFunc.(func(string, string) ([]utils.FileOperation, error))(projectDetails, fileTree)
-			case "FileContent":
-				if len(fileOrder) > 0 {
-					result, err = tt.llmFunc.(func(string, string, string, map[string]string) (string, error))(
-						fileOrder[0], projectDetails, fileTree, fileContent)
-				} else {
-					t.Fatalf("FileOrder is empty, cannot generate file content")
-				}
-			}
-
-			if err != nil {
-				t.Fatalf("%s error: %v", tt.name, err)
-			}
-
-			var output string
-			switch v := result.(type) {
-			case string:
-				output = v
-			case []string:
-				output = fmt.Sprintf("%v", v)
-			case []utils.FileOperation:
-				jsonOutput, err := json.MarshalIndent(v, "", "  ")
-				if err != nil {
-					t.Fatalf("Error marshaling FileOperations: %v", err)
-				}
-				output = string(jsonOutput)
-			default:
-				t.Fatalf("Unknown result type for %s", tt.name)
-			}
-
-			err = os.WriteFile(filepath.Join(outPath, tt.filename), []byte(output), 0644)
-			if err != nil {
-				t.Fatalf("Error writing to file: %v", err)
-			}
-
-			switch tt.name {
-			case "ProjectDetails":
-				projectDetails = output
-			case "FileTree":
-				fileTree = output
-			case "FileOrder":
-				err = json.Unmarshal([]byte(output), &fileOrder)
-				if err != nil {
-					t.Fatalf("Error unmarshaling FileOrder: %v", err)
-				}
-			case "FileContent":
-				if len(fileOrder) > 0 {
-					fileContent[fileOrder[0]] = output
-				}
-			}
-
-			t.Logf("Output saved to %s", filepath.Join(outPath, tt.filename))
-		})
+	if err != nil {
+		fileOrder, err = llmClient.DetermineFileOrder(fileTree)
+		if err != nil {
+			t.Fatalf("FileOrder error: %v", err)
+		}
+		fileOrderStr = fmt.Sprintf("%v", fileOrder)
+		if err := cache.Set("file_order.json", fileOrderStr); err != nil {
+			t.Logf("Failed to cache file order: %v", err)
+		}
+	} else {
+		// Convert string back to slice
+		fmt.Sscanf(fileOrderStr, "%v", &fileOrder)
 	}
+	t.Logf("File order determined: %v", fileOrder)
+
+	// Step 4: Generate File Operations
+	t.Log("Step 4: Generating File Operations")
+	fileOperationsStr, err := cache.Get("file_operations.json")
+	var fileOperations []utils.FileOperation
+	if err != nil {
+		fileOperations, err = llmClient.GenerateFileOperations(projectDetails, fileTree)
+		if err != nil {
+			t.Fatalf("FileOperations error: %v", err)
+		}
+		fileOperationsStr = fmt.Sprintf("%+v", fileOperations)
+		if err := cache.Set("file_operations.json", fileOperationsStr); err != nil {
+			t.Logf("Failed to cache file operations: %v", err)
+		}
+	} else {
+		// Convert string back to slice of FileOperation
+		// This is a simplification; you might need a more robust parsing method
+		fmt.Sscanf(fileOperationsStr, "%+v", &fileOperations)
+	}
+	t.Logf("Generated %d file operations", len(fileOperations))
+
+	// Step 5: Generate File Content
+	t.Log("Step 5: Generating File Content for all files")
+	if len(fileOrder) == 0 {
+		t.Fatalf("FileOrder is empty, cannot generate file content")
+	}
+
+	fileContentMap := make(map[string]string)
+	for _, fileName := range fileOrder {
+		t.Logf("Generating content for file: %s", fileName)
+
+		cacheFileName := fmt.Sprintf("file_content_%s.txt", strings.ReplaceAll(fileName, "/", "_"))
+		fileContent, err := cache.Get(cacheFileName)
+
+		if err != nil {
+			fileContent, err = llmClient.GenerateFileContent(fileName, projectDetails, fileTree, fileContentMap)
+			if err != nil {
+				t.Fatalf("FileContent error for %s: %v", fileName, err)
+			}
+			if err := cache.Set(cacheFileName, fileContent); err != nil {
+				t.Logf("Failed to cache file content for %s: %v", fileName, err)
+			}
+		}
+
+		fileContentMap[fileName] = fileContent
+		t.Logf("Generated content for file: %s", fileName)
+	}
+
+	t.Log("All steps completed successfully")
 }

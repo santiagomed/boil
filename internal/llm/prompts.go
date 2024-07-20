@@ -71,11 +71,26 @@ func getFileOrderPrompt(fileTree string) string {
 
 Provide an ordered list of files to be created, considering dependencies and logical progression.
 
-Return your response as a JSON array of file paths, relative to the project root. Each file path should be a string. Do not include any explanations or comments. For example:
+Return your response as a JSON object with a single key named "files", whose value is an array of file paths, relative to the project root. Each file path should be a string. Do not include any explanations or comments. For example:
 
-["package.json", "src/index.js", "src/components/App.js", "config/database.js"]
+{
+  "files": [
+    ".env",
+    ".gitignore",
+    "package.json",
+    "package-lock.json",
+    "README.md",
+    "src/config/config.js",
+    "src/middleware/errorHandler.js",
+    "src/routes/index.js",
+    "src/server.js",
+    "scripts/start.js",
+    "scripts/dev.js",
+    "tests/server.test.js"
+  ]
+}
 
-Ensure the JSON is valid and can be directly parsed.`, fileTree)
+Ensure the JSON is valid and can be directly parsed. The key MUST be named "files".`, fileTree)
 }
 
 func getFileContentPrompt(filePath, projectDetails, fileTree string, previousFiles map[string]string) string {
@@ -122,10 +137,15 @@ File Tree:
 Please provide:
 The file operation commands to create all files in the project, including both directories and files.
 
-Format your response as a JSON array of file operations, where each operation has the following structure:
+Format your response as a JSON object with a single key named "operations", whose value is an array of file operations. Each operation should have the following structure:
 {
-  "operation": "OPERATION_TYPE",
-  "path": "relative/path/to/file/or/directory"
+  "operations": [
+    {
+      "operation": "OPERATION_TYPE",
+      "path": "relative/path/to/file/or/directory"
+    },
+    ...
+  ]
 }
 
 Valid operation types are: CREATE_DIR, CREATE_FILE
@@ -135,5 +155,7 @@ Ensure that:
 2. The operations follow the structure and conventions specified in the project details and file tree
 3. No actual file content is included in these operations
 
-The operations should only set up the file structure. File content will be generated separately.`, projectDetails, fileTree)
+The operations should only set up the file structure. File content will be generated separately.
+
+Ensure the JSON is valid and can be directly parsed. The key MUST be named "operations".`, projectDetails, fileTree)
 }
