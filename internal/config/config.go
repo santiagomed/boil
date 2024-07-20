@@ -10,15 +10,13 @@ import (
 
 // Config stores all configuration of the application.
 type Config struct {
-	OpenAIAPIKey string `mapstructure:"openai_api_key"`
 	OutputDir    string `mapstructure:"output_dir"`
 	TempDir      string `mapstructure:"temp_dir"`
+	OpenAIAPIKey string `mapstructure:"openai_api_key"`
 	ModelName    string `mapstructure:"model_name"`
 	GitRepo      bool   `mapstructure:"git_repo"`
 	GitIgnore    bool   `mapstructure:"git_ignore"`
 	Readme       bool   `mapstructure:"readme"`
-	License      bool   `mapstructure:"license"`
-	LicenseType  string `mapstructure:"license_type"`
 	Dockerfile   bool   `mapstructure:"dockerfile"`
 }
 

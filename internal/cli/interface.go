@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"boil/internal/config"
-	"boil/internal/generator"
+	"boil/internal/core"
 	"boil/internal/llm"
 	"boil/internal/utils"
 
@@ -32,15 +32,14 @@ type model struct {
 	spinner         spinner.Model
 	prompt          string
 	projectDesc     string
-	outputDir       string
 	tmpDir          string
 	state           state
 	err             error
 	confirmation    string
 	config          *config.Config
 	currentQuestion int
-	engine          *generator.ProjectEngine
-	answers		    []string
+	engine          *core.Engine
+	answers         []string
 }
 
 func initialModel(prompt string) model {
@@ -120,23 +119,22 @@ func (m model) View() string {
 	case Processing:
 		return fmt.Sprintf("%s Generating project... Please wait.", m.spinner.View())
 	case Questions:
-        questions := []string{
-            "Do you want to initialize a git repository?",
-            "Do you want to generate a .gitignore file?",
-            "Do you want to generate a README.md file?",
-            "Do you want to generate a LICENSE file?",
-            "Do you want to generate a Dockerfile?",
-        }
-        var output strings.Builder
-        for i, q := range questions {
-            if i < m.currentQuestion {
-                output.WriteString(fmt.Sprintf("%s (%s)\n", q, m.answers[i]))
-            } else if i == m.currentQuestion {
-                output.WriteString(fmt.Sprintf("%s (y/n): \n%s", q, m.textInput.View()))
-            }
-        }
+		questions := []string{
+			"Do you want to initialize a git repository?",
+			"Do you want to generate a .gitignore file?",
+			"Do you want to generate a README.md file?",
+			"Do you want to generate a Dockerfile?",
+		}
+		var output strings.Builder
+		for i, q := range questions {
+			if i < m.currentQuestion {
+				output.WriteString(fmt.Sprintf("%s (%s)\n", q, m.answers[i]))
+			} else if i == m.currentQuestion {
+				output.WriteString(fmt.Sprintf("%s (y/n): \n%s", q, m.textInput.View()))
+			}
+		}
 		output.WriteString("\n(Enter 'b' to go back, or 'esc' to quit)")
-        return output.String()
+		return output.String()
 	case Confirm:
 		return fmt.Sprintf(
 			"Project generated in temporary directory: %s\n"+
@@ -162,7 +160,7 @@ func (m *model) setup() (tea.Model, tea.Cmd) {
 	}
 
 	llmClient := llm.NewClient(m.config)
-	m.engine = generator.NewProjectEngine(m.config, llmClient)
+	m.engine = core.NewProjectEngine(m.config, llmClient)
 
 	m.state = Questions
 	m.currentQuestion = 0
@@ -173,50 +171,47 @@ func (m *model) setup() (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleQuestions(answer string) (tea.Model, tea.Cmd) {
-    answer = strings.ToLower(answer)
+	answer = strings.ToLower(answer)
 
-    if answer != "y" && answer != "n" && answer != "b" {
-        return m, nil
-    }
-    
-    if answer == "b" && m.currentQuestion > 0 {
-        m.currentQuestion--
-        m.answers = m.answers[:len(m.answers)-1]
-        return m, nil
-    }
+	if answer != "y" && answer != "n" && answer != "b" {
+		return m, nil
+	}
 
-    m.answers = append(m.answers, answer)
+	if answer == "b" && m.currentQuestion > 0 {
+		m.currentQuestion--
+		m.answers = m.answers[:len(m.answers)-1]
+		return m, nil
+	}
 
-    switch m.currentQuestion {
-    case 0:
-        m.config.GitRepo = answer == "y"
-    case 1:
-        m.config.GitIgnore = answer == "y"
-    case 2:
-        m.config.Readme = answer == "y"
-    case 3:
-        m.config.License = answer == "y"
-    case 4:
-        m.config.Dockerfile = answer == "y"
-    }
+	m.answers = append(m.answers, answer)
+
+	switch m.currentQuestion {
+	case 0:
+		m.config.GitRepo = answer == "y"
+	case 1:
+		m.config.GitIgnore = answer == "y"
+	case 2:
+		m.config.Readme = answer == "y"
+	case 3:
+		m.config.Dockerfile = answer == "y"
+	}
 
 	m.currentQuestion++
 
 	if m.currentQuestion >= 5 {
 		m.updateConfig()
-        m.state = Processing
-        return m, m.startProjectGeneration
-    }
+		m.state = Processing
+		return m, m.startProjectGeneration
+	}
 
-    return m, tea.Batch(textinput.Blink, func() tea.Msg { return nil })
+	return m, tea.Batch(textinput.Blink, func() tea.Msg { return nil })
 }
 
 func (m *model) updateConfig() {
 	m.config.GitRepo = m.answers[0] == "y"
 	m.config.GitIgnore = m.answers[1] == "y"
 	m.config.Readme = m.answers[2] == "y"
-	m.config.License = m.answers[3] == "y"
-	m.config.Dockerfile = m.answers[4] == "y"
+	m.config.Dockerfile = m.answers[3] == "y"
 }
 
 func (m *model) startProjectGeneration() tea.Msg {
@@ -232,12 +227,11 @@ func (m *model) startProjectGeneration() tea.Msg {
 }
 
 func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
-	err := m.engine.FinalizeProject(m.tmpDir, m.outputDir)
+	err := m.engine.CleanupTempDir()
 	if err != nil {
 		m.err = fmt.Errorf("error finalizing project: %w", err)
 		return m, tea.Quit
 	}
-	m.engine.CleanupTempDir()
 	return m, tea.Quit
 }
 

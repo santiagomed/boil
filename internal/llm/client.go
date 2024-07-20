@@ -100,7 +100,21 @@ func (c *Client) GenerateFileContent(fileName, projectDetails, fileTree string, 
 	return content, nil
 }
 
-func (c *Client) GenerateContent(prompt string) (string, error) {
+// GenerateReadmeContent generates content for a README file
+func (c *Client) GenerateReadmeContent(projectDetails string) (string, error) {
+	prompt := getReadmePrompt(projectDetails)
+	return c.getCompletion(prompt, "text")
+}
+
+// Generate gitignore content
+func (c *Client) GenerateGitignoreContent(projectDetails string) (string, error) {
+	prompt := getGitignorePrompt(projectDetails)
+	return c.getCompletion(prompt, "text")
+}
+
+// Generate Dockerfile content
+func (c *Client) GenerateDockerfileContent(projectDetails string) (string, error) {
+	prompt := getDockerfilePrompt(projectDetails)
 	return c.getCompletion(prompt, "text")
 }
 

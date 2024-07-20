@@ -38,30 +38,40 @@ Format your response as a structured markdown document with clear headings and s
 }
 
 func getFileTreePrompt(projectDetails string) string {
-	return fmt.Sprintf(`Based on the following project details:
+	return fmt.Sprintf(`Based on the following project details, generate a file tree structure for the project:
 
 %s
 
-Generate a comprehensive file tree structure that:
+Please provide a file tree structure that includes:
+1. Essential directories for the project structure
+2. Core source code files
+3. Configuration files
+4. README and other documentation files
 
-1. Reflects all main components and modules described
-2. Follows conventions for the specified tech stack and frameworks
-3. Organizes code logically (e.g., separate routes, models, controllers, services)
-4. Includes all necessary configuration files, build scripts, and dotfiles
-5. Represents test directories, documentation, and any other project-specific needs
-6. Uses appropriate naming conventions for the primary programming language(s)
+Do NOT include:
+1. Package manager lock files (e.g., package-lock.json, yarn.lock)
+2. Build output directories (e.g., /dist, /build)
+3. Dependency directories (e.g., /node_modules)
+4. IDE or editor-specific files or directories
+5. Temporary or cache files
+6. Any files that would be automatically generated during build or runtime
 
-Present the file tree as plain text, using indentation to show hierarchy. Use '/' for directories and no trailing slash for files. For example:
+Format the file tree as a text-based tree structure, using indentation to represent directory nesting. For example:
 
-src/
- main.js
- components/
-   Header.js
-   Footer.js
-config/
- database.js
+project-root/
+├── .gitignore
+├── README.md
+├── src/
+│   ├── index.js
+│   ├── config/
+│   │   └── config.js
+│   └── utils/
+│       └── helper.js
+├── tests/
+│   └── index.test.js
+└── .env.example
 
-Provide only the file tree structure, with no additional explanations or comments.`, projectDetails)
+Ensure the tree structure reflects a clean, production-ready project setup without including any auto-generated or temporary files.`, projectDetails)
 }
 
 func getFileOrderPrompt(fileTree string) string {
@@ -158,4 +168,79 @@ Ensure that:
 The operations should only set up the file structure. File content will be generated separately.
 
 Ensure the JSON is valid and can be directly parsed. The key MUST be named "operations".`, projectDetails, fileTree)
+}
+
+func getDockerfilePrompt(projectDetails string) string {
+	return fmt.Sprintf(`Based on the following project details, generate an appropriate Dockerfile:
+
+%s
+
+The Dockerfile should:
+
+1. Use an official base image appropriate for the project's primary language/framework.
+2. Set up the working directory in the container.
+3. Copy the necessary project files into the container.
+4. Install any required dependencies.
+5. Expose any necessary ports.
+6. Specify the command to run the application.
+
+Additionally, ensure that:
+1. The Dockerfile follows best practices for the chosen base image and project type.
+2. It includes comments explaining each significant step.
+3. It optimizes for build speed and image size where possible (e.g., using multi-stage builds if appropriate).
+4. Any environment-specific configurations are handled appropriately (e.g., using ARG or ENV instructions).
+
+Return only the content of the Dockerfile, with no additional explanations or markdown formatting.`, projectDetails)
+}
+
+func getReadmePrompt(projectDetails string) string {
+	return fmt.Sprintf(`Based on the following project details, generate a concise README.md file suitable for an MVP (Minimum Viable Product):
+
+%s
+
+The README should include the following sections:
+
+1. Project Title
+2. Brief Description
+3. Key Features (limit to 3-5 core features)
+4. Quick Start Guide
+  - Prerequisites (keep it minimal)
+  - Installation
+  - Basic Usage
+5. Configuration (if absolutely necessary, keep it brief)
+6. Basic Troubleshooting (optional, only if there are common issues)
+
+Format the README in Markdown. Ensure that:
+1. The content is clear, concise, and focuses on getting started quickly.
+2. Code snippets or commands are properly formatted in Markdown code blocks.
+3. Any placeholders for project-specific information are clearly marked (e.g., [YOUR_API_KEY]).
+4. The README provides just enough information for a developer to understand the project's purpose and get it running.
+
+Omit sections on detailed API documentation, extensive testing procedures, deployment strategies, contributing guidelines, and licensing information.
+
+Return only the content of the README.md file, formatted in Markdown.`, projectDetails)
+}
+
+func getGitignorePrompt(projectDetails string) string {
+	return fmt.Sprintf(`Based on the following project details, generate an appropriate .gitignore file:
+
+%s
+
+The .gitignore file should:
+
+1. Include common patterns for the primary programming language and framework used in the project.
+2. Exclude common operating system files and directories (e.g., .DS_Store for macOS, Thumbs.db for Windows).
+3. Ignore dependency directories (e.g., node_modules for Node.js projects).
+4. Exclude build output and compiled files.
+5. Ignore common IDE and text editor specific files and directories.
+6. Exclude log files and other runtime-generated files.
+7. Ignore environment-specific files (e.g., .env files containing sensitive information).
+
+Additionally:
+- Group related ignore patterns together with clear comments.
+- Include patterns for both directories and files where applicable.
+- Use wildcard patterns judiciously to cover variations (e.g., *.log for all log files).
+- If the project uses a specific build tool or package manager, include relevant ignore patterns for those.
+
+Return only the content of the .gitignore file, with each pattern on a new line and using # for comments.`, projectDetails)
 }
