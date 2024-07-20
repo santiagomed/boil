@@ -3,43 +3,53 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
+	"log"
 	"strings"
 
-	"github.com/santiagomed/boil/internal/config"
-	openai "github.com/sashabaranov/go-openai"
+	"boil/internal/config" // Update this import path
+	"boil/internal/utils"
+
+	"github.com/sashabaranov/go-openai"
 )
 
-var client *openai.Client
-
-func init() {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		apiKey = config.GetOpenAIAPIKey()
-	}
-	if apiKey == "" {
-		fmt.Println("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable or configure it in the config file.")
-		os.Exit(1)
-	}
-	client = openai.NewClient(apiKey)
+// Client represents an LLM client
+type Client struct {
+	openAIClient *openai.Client
+	config       *config.Config
 }
 
-func GenerateProjectDetails(projectDesc string) (string, error) {
+// NewClient creates a new LLM client
+func NewClient(cfg *config.Config) *Client {
+	if cfg.OpenAIAPIKey == "" {
+		log.Fatal("OpenAI API key is not set")
+	}
+	openAIClient := openai.NewClient(cfg.OpenAIAPIKey)
+	return &Client{
+		openAIClient: openAIClient,
+		config:       cfg,
+	}
+}
+
+// GenerateProjectDetails generates detailed project information based on a description
+func (c *Client) GenerateProjectDetails(projectDesc string) (string, error) {
 	prompt := getProjectDetailsPrompt(projectDesc)
-	return getCompletion(prompt)
+	return c.getCompletion(prompt, "text")
 }
 
-func GenerateFileTree(projectDetails string) (string, error) {
+// GenerateFileTree generates a file tree structure based on project details
+func (c *Client) GenerateFileTree(projectDetails string) (string, error) {
 	prompt := getFileTreePrompt(projectDetails)
-	return getCompletion(prompt)
+	return c.getCompletion(prompt, "text")
 }
 
-func DetermineFileOrder(fileTree string) ([]string, error) {
+// DetermineFileOrder determines the order in which files should be created
+func (c *Client) DetermineFileOrder(fileTree string) ([]string, error) {
 	prompt := getFileOrderPrompt(fileTree)
-	response, err := getCompletion(prompt)
+	response, err := c.getCompletion(prompt, "text")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to determine file order: %w", err)
 	}
 
 	lines := strings.Split(response, "\n")
@@ -53,53 +63,90 @@ func DetermineFileOrder(fileTree string) ([]string, error) {
 		}
 	}
 
+	if len(fileOrder) == 0 {
+		return nil, fmt.Errorf("no valid file paths found in the response")
+	}
+
 	return fileOrder, nil
 }
 
-func GenerateFileContent(filePath, projectDetails, fileTree string) (string, error) {
-	prompt := getFileContentPrompt(filePath, projectDetails, fileTree)
-	return getCompletion(prompt)
+// GenerateFileOperations generates file operations for creating a specific file
+func (c *Client) GenerateFileOperations(projectDetails, fileTree string) ([]utils.FileOperation, error) {
+	prompt := getFileOperationsPrompt(projectDetails, fileTree)
+	response, err := c.getCompletion(prompt, "json_object")
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate file operations: %w", err)
+	}
+
+	var operations []utils.FileOperation
+	err = json.Unmarshal([]byte(response), &operations)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing file operations: %w", err)
+	}
+
+	if len(operations) == 0 {
+		return nil, fmt.Errorf("no file operations generated")
+	}
+
+	return operations, nil
 }
 
-func getCompletion(prompt string) (string, error) {
-	resp, err := client.CreateChatCompletion(
+// GenerateFileContent generates content for a specific file
+func (c *Client) GenerateFileContent(fileName, projectDetails, fileTree string, previousFiles map[string]string) (string, error) {
+	prompt := getFileContentPrompt(fileName, projectDetails, fileTree, previousFiles)
+	content, err := c.getCompletion(prompt, "text")
+	if err != nil {
+		return "", fmt.Errorf("failed to generate file content for %s: %w", fileName, err)
+	}
+
+	if content == "" {
+		return "", fmt.Errorf("generated content for %s is empty", fileName)
+	}
+
+	return content, nil
+}
+
+func (c *Client) GenerateContent(prompt string) (string, error) {
+	return c.getCompletion(prompt, "text")
+}
+
+// getCompletion sends a request to the OpenAI API and returns the generated text
+func (c *Client) getCompletion(prompt string, responseType openai.ChatCompletionResponseFormatType) (string, error) {
+	resp, err := c.openAIClient.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT3Dot5Turbo,
+			Model: c.config.ModelName,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
 				},
 			},
+			ResponseFormat: &openai.ChatCompletionResponseFormat{Type: responseType},
 		},
 	)
 
-	if err != nil {
-		return "", fmt.Errorf("ChatCompletion error: %v", err)
+	e := &openai.APIError{}
+	if errors.As(err, &e) {
+		switch e.HTTPStatusCode {
+		case 401:
+			// unauthorized
+			return "", fmt.Errorf("unauthorized: invalid OpenAI API key")
+		case 429:
+			// rate limiting or engine overload (wait and retry)
+			return "", fmt.Errorf("rate limited by OpenAI API")
+		case 500:
+			// openai server error (retry)
+			return "", fmt.Errorf("OpenAI server error")
+		default:
+			// unhandled
+			return "", fmt.Errorf("OpenAI API error: %v", e)
+		}
+	}
+
+	if len(resp.Choices) == 0 {
+		return "", fmt.Errorf("no choices returned from OpenAI")
 	}
 
 	return resp.Choices[0].Message.Content, nil
-}
-
-type FileOperation struct {
-	Operation string `json:"operation"`
-	Path      string `json:"path"`
-	Content   string `json:"content,omitempty"`
-}
-
-func GenerateFileOperations(filePath, projectDetails, fileTree string) ([]FileOperation, error) {
-	prompt := getFileOperationsPrompt(filePath, projectDetails, fileTree)
-	response, err := getCompletion(prompt)
-	if err != nil {
-		return nil, err
-	}
-
-	var operations []FileOperation
-	err = json.Unmarshal([]byte(response), &operations)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing file operations: %v", err)
-	}
-
-	return operations, nil
 }

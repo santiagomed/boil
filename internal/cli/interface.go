@@ -3,36 +3,55 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
+	"boil/internal/config"
+	"boil/internal/generator"
+	"boil/internal/llm"
+	"boil/internal/utils"
+
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/santiagomed/boil/internal/generator"
-	"github.com/santiagomed/boil/internal/llm"
-	"github.com/santiagomed/boil/internal/tempdir"
-	"github.com/santiagomed/boil/pkg/utils"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
 )
 
 type model struct {
-	textInput    textinput.Model
-	projectDesc  string
-	outputDir    string
-	tmpDir       string
-	state        string
-	err          error
-	confirmation string
+	p 		        *tea.Program
+	textInput       textinput.Model
+	spinner 	    spinner.Model
+	prompt 		    string
+	projectDesc     string
+	outputDir       string
+	state           string
+	err             error
+	confirmation    string
+	config          *config.Config
+	currentQuestion int
 }
 
-func initialModel() model {
+func initialModel(prompt string) model {
 	ti := textinput.New()
 	ti.Placeholder = "Describe your project..."
 	ti.Focus()
 	ti.CharLimit = 156
 	ti.Width = 80
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+
 	return model{
 		textInput: ti,
-		outputDir: ".",
-		state:     "input",
+		spinner: s,
+		prompt: prompt,
+		state: "input",
+		err: nil,
+		confirmation: "",
+		config: nil,
+		currentQuestion: 0,
 	}
 }
 
@@ -86,9 +105,8 @@ func (m model) View() string {
 		return "Generating project... Please wait."
 	case "confirm":
 		return fmt.Sprintf(
-			"Project generated in temporary directory: %s\n"+
+			"Project generated in temporary directory: <ADD>\n"+ // Add temporary directory path
 				"Review the project and enter 'y' to finalize, or 'n' to abort: ",
-			m.tmpDir,
 		)
 	case "finalizing":
 		return "Finalizing project..."
@@ -103,42 +121,53 @@ func (m *model) generateProject() tea.Msg {
 	// Sanitize input
 	m.projectDesc = utils.SanitizeInput(m.projectDesc)
 
-	// Create temporary directory
-	m.tmpDir, err = tempdir.CreateTempProjectDir()
+	// Load configuration
+	m.config, err = config.LoadConfig("")
 	if err != nil {
-		return fmt.Errorf("error creating temporary directory: %v", err)
+		return fmt.Errorf("error loading configuration: %w", err)
 	}
 
-	// Generate project steps and details
-	projectDetails, err := llm.GenerateProjectDetails(m.projectDesc)
+	m.state = "questions"
+	m.currentQuestion = 0
+	return nil
+}
+
+func (m *model) handleQuestions(answer string) tea.Msg {
+	switch m.currentQuestion {
+	case 0:
+		m.config.GitRepo = strings.ToLower(answer) == "y"
+	case 1:
+		m.config.GitIgnore = strings.ToLower(answer) == "y"
+	case 2:
+		m.config.Readme = strings.ToLower(answer) == "y"
+	case 3:
+		m.config.License = strings.ToLower(answer) == "y"
+	case 4:
+		m.config.Dockerfile = strings.ToLower(answer) == "y"
+	}
+
+	m.currentQuestion++
+	if m.currentQuestion >= 5 {
+		return m.startProjectGeneration()
+	}
+	return nil
+}
+
+func (m *model) startProjectGeneration() tea.Msg {
+	// Create LLM client
+	llmClient := llm.NewClient(m.config)
+
+	// Create ProjectEngine
+	engine := generator.NewProjectEngine(m.config, llmClient)
+
+	// Generate project
+	err := engine.Generate(m.projectDesc)
 	if err != nil {
-		return fmt.Errorf("error generating project details: %v", err)
+		return fmt.Errorf("error generating project: %w", err)
 	}
 
-	// Generate file tree
-	fileTree, err := llm.GenerateFileTree(projectDetails)
-	if err != nil {
-		return fmt.Errorf("error generating file tree: %v", err)
-	}
-
-	// Determine file creation order
-	fileOrder, err := llm.DetermineFileOrder(fileTree)
-	if err != nil {
-		return fmt.Errorf("error determining file creation order: %v", err)
-	}
-
-	// Generate code for each file
-	for _, file := range fileOrder {
-		fileContent, err := llm.GenerateFileContent(file, projectDetails, fileTree)
-		if err != nil {
-			return fmt.Errorf("error generating content for %s: %v", file, err)
-		}
-
-		err = generator.CreateFile(m.tmpDir, file, fileContent)
-		if err != nil {
-			return fmt.Errorf("error creating file %s: %v", file, err)
-		}
-	}
+	// Set the temporary directory path
+	m.tmpDir = m.config.TempDir
 
 	m.state = "confirm"
 	return nil
@@ -152,10 +181,22 @@ func (m *model) finalizeProject() tea.Msg {
 	return tea.Quit
 }
 
-func Execute() {
-	p := tea.NewProgram(initialModel())
-	if _, err := p.Run(); err != nil {
-		fmt.Printf("Error: %v", err)
-		os.Exit(1)
-	}
+
+var rootCmd = &cobra.Command{
+	Use:   "boil",
+	Short: "Boil is a CLI tool for generating project boilerplate files",
+	Long:  `Boil is a powerful CLI tool that uses AI to generate custom project boilerplate files based on your description.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		prompt := strings.Join(args, " ")
+		p := tea.NewProgram(initialModel(prompt))
+		if _, err := p.Run(); err != nil {
+			fmt.Printf("Error: %v", err)
+			os.Exit(1)
+		}
+	},
+}
+
+func init() {
+	rootCmd.Flags().StringP("output", "o", ".", "Output directory for the generated project")
+	rootCmd.Flags().StringP("config", "c", "", "Path to custom configuration file")
 }

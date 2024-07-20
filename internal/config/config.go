@@ -9,12 +9,17 @@ import (
 )
 
 // Config stores all configuration of the application.
-// The values are read by viper from a config file or environment variable.
 type Config struct {
 	OpenAIAPIKey string `mapstructure:"openai_api_key"`
 	OutputDir    string `mapstructure:"output_dir"`
 	TempDir      string `mapstructure:"temp_dir"`
 	ModelName    string `mapstructure:"model_name"`
+	GitRepo      bool   `mapstructure:"git_repo"`
+	GitIgnore    bool   `mapstructure:"git_ignore"`
+	Readme       bool   `mapstructure:"readme"`
+	License      bool   `mapstructure:"license"`
+	LicenseType  string `mapstructure:"license_type"`
+	Dockerfile   bool   `mapstructure:"dockerfile"`
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -25,6 +30,12 @@ func LoadConfig(configPath string) (*Config, error) {
 	v.SetDefault("output_dir", ".")
 	v.SetDefault("temp_dir", os.TempDir())
 	v.SetDefault("model_name", "gpt-3.5-turbo")
+	v.SetDefault("git_repo", true)
+	v.SetDefault("git_ignore", true)
+	v.SetDefault("readme", true)
+	v.SetDefault("license", false)
+	v.SetDefault("license_type", "MIT")
+	v.SetDefault("dockerfile", false)
 
 	// Set config file name and path
 	v.SetConfigName("config")
