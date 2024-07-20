@@ -29,7 +29,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Set default values
 	v.SetDefault("output_dir", ".")
 	v.SetDefault("temp_dir", os.TempDir())
-	v.SetDefault("model_name", "gpt-3.5-turbo")
+	v.SetDefault("model_name", "gpt-4o-mini")
 	v.SetDefault("git_repo", true)
 	v.SetDefault("git_ignore", true)
 	v.SetDefault("readme", true)
@@ -49,7 +49,7 @@ func LoadConfig(configPath string) (*Config, error) {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
 		// Config file not found; ignore error if desired
-		fmt.Println("No config file found. Using defaults and environment variables.")
+		// fmt.Println("No config file found. Using defaults and environment variables.")
 	}
 
 	// Read from environment variables

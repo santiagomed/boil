@@ -1,7 +1,9 @@
 package main
 
+import (
+	"boil/internal/cli"
+)
+
 func main() {
-	if err := cli.rootCmd.Execute(); err != nil {
-		panic(err)
-	}
+	cli.Execute()
 }

@@ -14,6 +14,7 @@ import (
 type ProjectEngine struct {
 	config *config.Config
 	llm    *llm.Client
+	tmpDir *tempdir.Manager
 }
 
 // NewProjectEngine creates a new ProjectEngine
@@ -21,88 +22,118 @@ func NewProjectEngine(cfg *config.Config, llmClient *llm.Client) *ProjectEngine 
 	return &ProjectEngine{
 		config: cfg,
 		llm:    llmClient,
+		tmpDir: tempdir.NewManager(cfg),
 	}
 }
 
 // Generate performs the project generation process
-func (pg *ProjectEngine) Generate(projectDesc string) error {
+func (pg *ProjectEngine) Generate(projectDesc string) (string, error) {
 	// Create temporary directory
-	tmpDir := tempdir.NewManager(pg.config)
-	tmpDirPath, err := tmpDir.CreateTempDir("boil")
+	tmpDirPath, err := pg.tmpDir.CreateTempDir("boil")
 	if err != nil {
-		return fmt.Errorf("failed to create temporary directory: %w", err)
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
 	}
-	defer tmpDir.Cleanup()
 
 	// Generate project details
 	projectDetails, err := pg.llm.GenerateProjectDetails(projectDesc)
 	if err != nil {
-		return fmt.Errorf("failed to generate project details: %w", err)
+		return "", fmt.Errorf("failed to generate project details: %w", err)
 	}
 
 	// Generate file tree
 	fileTree, err := pg.llm.GenerateFileTree(projectDetails)
 	if err != nil {
-		return fmt.Errorf("failed to generate file tree: %w", err)
+		return "", fmt.Errorf("failed to generate file tree: %w", err)
+	}
+
+	// Generate and execute file operations
+	operations, err := pg.llm.GenerateFileOperations(projectDetails, fileTree)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate file operations: %w", err)
+	}
+	err = utils.ExecuteFileOperations(tmpDirPath, operations)
+	if err != nil {
+		return "", fmt.Errorf("failed to execute file operations: %w", err)
 	}
 
 	// Determine file creation order
 	fileOrder, err := pg.llm.DetermineFileOrder(fileTree)
 	if err != nil {
-		return fmt.Errorf("failed to determine file creation order: %w", err)
+		return "", fmt.Errorf("failed to determine file creation order: %w", err)
 	}
 
-	// Generate and execute file operations
-	for _, filePath := range fileOrder {
-		operations, err := pg.llm.GenerateFileOperations(filePath, projectDetails, fileTree)
+	previousFiles := make(map[string]string)
+	
+	// Generate file content
+	for _, file := range fileOrder {
+		content, err := pg.llm.GenerateFileContent(file, projectDetails, fileTree, previousFiles)
 		if err != nil {
-			return fmt.Errorf("failed to generate file operations for %s: %w", filePath, err)
+			return "", fmt.Errorf("failed to generate content for file %s: %w", file, err)
 		}
-
-		err = utils.ExecuteFileOperations(tmpDirPath, operations)
+		err = utils.WriteFile(filepath.Join(tmpDirPath, file), content)
 		if err != nil {
-			return fmt.Errorf("failed to execute file operations for %s: %w", filePath, err)
+			return "", fmt.Errorf("failed to create file %s: %w", file, err)
 		}
+		previousFiles[file] = content
 	}
 
-	// Initialize git repository
-	_, err = utils.ExecuteCmd(tmpDirPath, "git", "init")
-	if err != nil {
-		return fmt.Errorf("failed to initialize git repository: %w", err)
-	}
-
-	// Create .gitignore file
-	err = utils.CreateGitIgnore(tmpDirPath)
-	if err != nil {
-		return fmt.Errorf("failed to create .gitignore file: %w", err)
-	}
-
-	// Allow user to review the generated project
-	fmt.Printf("Project generated in temporary directory: %s\n", tmpDirPath)
-	fmt.Print("Review the project and enter 'y' to finalize, or any other key to abort: ")
-	var response string
-	fmt.Scanln(&response)
-
-	if response == "y" {
-		// Finalize project
-		projectName := utils.FormatProjectName(filepath.Base(projectDesc))
-		finalDir := filepath.Join(pg.config.OutputDir, projectName)
-		err = FinalizeProject(tmpDirPath, finalDir)
+	// Generate optional components based on config
+	if pg.config.GitRepo {
+		err = utils.InitializeGitRepo(tmpDirPath)
 		if err != nil {
-			return fmt.Errorf("failed to finalize project: %w", err)
+			return "", fmt.Errorf("failed to initialize git repository: %w", err)
 		}
-		fmt.Printf("Project successfully created in: %s\n", finalDir)
-	} else {
-		fmt.Println("Project creation aborted. Temporary files will be cleaned up.")
 	}
 
-	return nil
+	if pg.config.GitIgnore {
+		err = utils.CreateGitIgnore(tmpDirPath)
+		if err != nil {
+			return "", fmt.Errorf("failed to create .gitignore file: %w", err)
+		}
+	}
+
+	if pg.config.Readme {
+		readme, err := pg.GenerateREADME(projectDetails)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate README: %w", err)
+		}
+		err = utils.WriteFile(filepath.Join(tmpDirPath, "README.md"), readme)
+		if err != nil {
+			return "", fmt.Errorf("failed to create README file: %w", err)
+		}
+	}
+
+	if pg.config.License {
+		license, err := pg.GenerateLicense(pg.config.LicenseType)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate LICENSE: %w", err)
+		}
+		err = utils.WriteFile(filepath.Join(tmpDirPath, "LICENSE"), license)
+		if err != nil {
+			return "", fmt.Errorf("failed to create LICENSE file: %w", err)
+		}
+	}
+
+	if pg.config.Dockerfile {
+		dockerfile, err := pg.GenerateDockerfile(projectDetails)
+		if err != nil {
+			return "", fmt.Errorf("failed to generate Dockerfile: %w", err)
+		}
+		err = utils.WriteFile(filepath.Join(tmpDirPath, "Dockerfile"), dockerfile)
+		if err != nil {
+			return "", fmt.Errorf("failed to create Dockerfile: %w", err)
+		}
+	}
+
+	return tmpDirPath, nil
 }
 
 // FinalizeProject moves the generated project to the final output directory
-func FinalizeProject(tmpDir, finalDir string) error {
-	// Move the generated project to the final output directory
-	err := utils.MoveDir(tmpDir, finalDir)
+func (pg *ProjectEngine) FinalizeProject(tmpDir, finalDir string) error {
+	projectName := utils.FormatProjectName(filepath.Base(finalDir))
+	finalPath := filepath.Join(pg.config.OutputDir, projectName)
+	
+	err := utils.MoveDir(tmpDir, finalPath)
 	if err != nil {
 		return fmt.Errorf("failed to move project to final directory: %w", err)
 	}
@@ -110,38 +141,25 @@ func FinalizeProject(tmpDir, finalDir string) error {
 	return nil
 }
 
+// CleanupTempDir removes the temporary directory
+func (pg *ProjectEngine) CleanupTempDir() error {
+	return pg.tmpDir.Cleanup()
+}
+
 // GenerateREADME generates a README.md file for the project
 func (pg *ProjectEngine) GenerateREADME(projectDetails string) (string, error) {
 	prompt := fmt.Sprintf("Generate a README.md file for the following project:\n\n%s\n\nInclude sections for project description, installation, usage, and any other relevant information.", projectDetails)
-	
-	readme, err := pg.llm.GenerateContent(prompt)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate README: %w", err)
-	}
-
-	return readme, nil
+	return pg.llm.GenerateContent(prompt)
 }
 
 // GenerateLicense generates a LICENSE file for the project
 func (pg *ProjectEngine) GenerateLicense(licenseType string) (string, error) {
 	prompt := fmt.Sprintf("Generate the full text of a %s license.", licenseType)
-	
-	license, err := pg.llm.GenerateContent(prompt)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate LICENSE: %w", err)
-	}
-
-	return license, nil
+	return pg.llm.GenerateContent(prompt)
 }
 
 // GenerateDockerfile generates a Dockerfile for the project
 func (pg *ProjectEngine) GenerateDockerfile(projectDetails string) (string, error) {
 	prompt := fmt.Sprintf("Generate a Dockerfile for the following project:\n\n%s\n\nEnsure it includes all necessary steps to build and run the application.", projectDetails)
-	
-	dockerfile, err := pg.llm.GenerateContent(prompt)
-	if err != nil {
-		return "", fmt.Errorf("failed to generate Dockerfile: %w", err)
-	}
-
-	return dockerfile, nil
+	return pg.llm.GenerateContent(prompt)
 }

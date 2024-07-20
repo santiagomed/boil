@@ -13,7 +13,6 @@ import (
 type FileOperation struct {
 	Operation string `json:"operation"`
 	Path      string `json:"path"`
-	Content   string `json:"content,omitempty"`
 }
 
 // ExecuteFileOperations performs a series of file operations
@@ -34,19 +33,30 @@ func ExecuteFileOperation(baseDir string, op FileOperation) error {
 	case "CREATE_DIR":
 		return os.MkdirAll(fullPath, 0755)
 	case "CREATE_FILE":
-		return CreateFile(fullPath, op.Content)
+		return CreateFile(fullPath)
 	default:
 		return fmt.Errorf("unknown operation: %s", op.Operation)
 	}
 }
 
-// CreateFile creates a new file with the given content
-func CreateFile(path string, content string) error {
+// Creates a new file
+func CreateFile(path string) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("error creating directory %s: %w", dir, err)
 	}
 
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("error creating file %s: %w", path, err)
+	}
+	defer f.Close()
+
+	return nil
+}
+
+// Creates a new file with the given content or overwrites an existing file with the content
+func WriteFile(path string, content string) error {
 	f, err := os.Create(path)
 	if err != nil {
 		return fmt.Errorf("error creating file %s: %w", path, err)
@@ -174,7 +184,7 @@ func CreateGitIgnore(dir string) error {
 	gitignorePath := filepath.Join(dir, ".gitignore")
 	content := `# Ignore build files` // TODO: Add more content
 
-	return CreateFile(gitignorePath, content)
+	return WriteFile(gitignorePath, content)
 }
 
 // InitializeGitRepo initializes a git repository in the given directory
