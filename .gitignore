@@ -6,3 +6,6 @@
 *.dylib
 *.test
 *.out
+*.log
+.env
+tmp/

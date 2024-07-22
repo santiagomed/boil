@@ -10,6 +10,7 @@ import (
 	"boil/internal/config" // Update this import path
 	"boil/internal/utils"
 
+	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -17,6 +18,7 @@ import (
 type Client struct {
 	openAIClient *openai.Client
 	config       *config.Config
+	tellmClient  *tellm.Client
 }
 
 // NewClient creates a new LLM client
@@ -25,9 +27,11 @@ func NewClient(cfg *config.Config) *Client {
 		log.Fatal("OpenAI API key is not set")
 	}
 	openAIClient := openai.NewClient(cfg.OpenAIAPIKey)
+	tellmClient := tellm.NewClient("http://localhost:8080")
 	return &Client{
 		openAIClient: openAIClient,
 		config:       cfg,
+		tellmClient:  tellmClient,
 	}
 }
 
@@ -156,5 +160,8 @@ func (c *Client) getCompletion(prompt string, responseType openai.ChatCompletion
 		return "", fmt.Errorf("no choices returned from OpenAI")
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	res := resp.Choices[0].Message.Content
+	c.tellmClient.Log(prompt, res)
+
+	return res, nil
 }

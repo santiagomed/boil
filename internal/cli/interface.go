@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 )
 
@@ -40,6 +41,7 @@ type model struct {
 	currentQuestion int
 	engine          *core.Engine
 	answers         []string
+	logger          *zerolog.Logger
 }
 
 func initialModel(prompt string) model {
@@ -48,6 +50,10 @@ func initialModel(prompt string) model {
 	ti.Focus()
 	ti.CharLimit = 156
 	ti.Width = 80
+
+	logger := utils.GetLogger()
+
+	logger.Info().Msg("Initializing Boil CLI")
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -58,6 +64,7 @@ func initialModel(prompt string) model {
 		spinner:   s,
 		prompt:    prompt,
 		state:     Input,
+		logger:    logger,
 	}
 }
 
@@ -76,8 +83,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEnter:
 				m.projectDesc = m.textInput.Value()
 				m.textInput.SetValue("")
+				m.logger.Info().Msg("Project description entered: " + m.projectDesc)
 				return m.setup()
 			case tea.KeyCtrlC, tea.KeyEsc:
+				m.logger.Info().Msg("User exited the application")
 				return m, tea.Quit
 			}
 		case Questions:
@@ -144,6 +153,7 @@ func (m model) View() string {
 	case Finalizing:
 		return "Finalizing project..."
 	default:
+		m.logger.Error().Msg("An error occurred")
 		return "An error occurred."
 	}
 }
@@ -152,15 +162,16 @@ func (m *model) setup() (tea.Model, tea.Cmd) {
 	var err error
 
 	m.projectDesc = utils.SanitizeInput(m.projectDesc)
-	fmt.Println(m.projectDesc)
+	m.logger.Info().Str("Sanitized project description", m.projectDesc).Msg("Project description sanitized")
 
 	m.config, err = config.LoadConfig("")
 	if err != nil {
+		m.logger.Error().Err(err).Msg("Error loading configuration")
 		m.err = fmt.Errorf("error loading configuration: %w", err)
 	}
 
 	llmClient := llm.NewClient(m.config)
-	m.engine = core.NewProjectEngine(m.config, llmClient)
+	m.engine = core.NewProjectEngine(m.config, llmClient, m.logger)
 
 	m.state = Questions
 	m.currentQuestion = 0
@@ -198,7 +209,7 @@ func (m *model) handleQuestions(answer string) (tea.Model, tea.Cmd) {
 
 	m.currentQuestion++
 
-	if m.currentQuestion >= 5 {
+	if m.currentQuestion >= 4 {
 		m.updateConfig()
 		m.state = Processing
 		return m, m.startProjectGeneration
@@ -216,9 +227,10 @@ func (m *model) updateConfig() {
 
 func (m *model) startProjectGeneration() tea.Msg {
 	var err error
-	fmt.Println("generating project...")
+	m.logger.Info().Msg("Generating project...")
 	m.tmpDir, err = m.engine.Generate(m.projectDesc)
 	if err != nil {
+		m.logger.Error().Err(err).Msg("Error generating project")
 		return fmt.Errorf("error generating project: %w", err)
 	}
 
@@ -229,6 +241,7 @@ func (m *model) startProjectGeneration() tea.Msg {
 func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
 	err := m.engine.CleanupTempDir()
 	if err != nil {
+		m.logger.Error().Err(err).Msg("Error cleaning up temporary directory")
 		m.err = fmt.Errorf("error finalizing project: %w", err)
 		return m, tea.Quit
 	}

@@ -3,15 +3,17 @@ package core
 import (
 	"boil/internal/config"
 	"boil/internal/llm"
+
+	"github.com/rs/zerolog"
 )
 
 type Engine struct {
 	pipeline *Pipeline
 }
 
-func NewProjectEngine(config *config.Config, llm *llm.Client) *Engine {
+func NewProjectEngine(config *config.Config, llm *llm.Client, logger *zerolog.Logger) *Engine {
 	return &Engine{
-		pipeline: NewPipeline(config, llm),
+		pipeline: NewPipeline(config, llm, logger),
 	}
 }
 

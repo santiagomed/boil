@@ -3,6 +3,8 @@ package core
 import (
 	"boil/internal/config"
 	"boil/internal/llm"
+
+	"github.com/rs/zerolog"
 )
 
 type Pipeline struct {
@@ -10,13 +12,14 @@ type Pipeline struct {
 	state *State
 }
 
-func NewPipeline(config *config.Config, llm *llm.Client) *Pipeline {
+func NewPipeline(config *config.Config, llm *llm.Client, logger *zerolog.Logger) *Pipeline {
 	return &Pipeline{
 		steps: []Step{},
 		state: &State{
 			Config:        config,
 			LLM:           llm,
 			PreviousFiles: make(map[string]string),
+			Logger:        logger,
 		},
 	}
 }

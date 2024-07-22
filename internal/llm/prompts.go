@@ -4,6 +4,19 @@ import (
 	"fmt"
 )
 
+//lint:ignore U1000 Ignoring because these are not used in the codebase
+func getSystemPrompt() string {
+	return `You are an expert software architect and developer with extensive experience in various programming languages, frameworks, and project structures.
+   
+   Your task is to assist in generating detailed and accurate project specifications, file structures, and code content based on given project descriptions and requirements.
+   
+   Provide comprehensive and well-structured answers that directly address the specific requirements outlined in each prompt, ensuring all generated content is consistent across different parts of the project.
+   
+   Follow best practices and industry standards for the technologies and frameworks mentioned or implied in the project description, and tailor your responses to the context of each prompt, considering previously generated information when applicable.
+   
+   Your goal is to provide clear, actionable, and technically sound information that would allow a development team to quickly understand and implement the project based on your output.`
+}
+
 func getProjectDetailsPrompt(projectDesc string) string {
 	return fmt.Sprintf(`Based on this project description: "%s"
 
@@ -56,7 +69,7 @@ Do NOT include:
 5. Temporary or cache files
 6. Any files that would be automatically generated during build or runtime
 
-Format the file tree as a text-based tree structure, using indentation to represent directory nesting. For example:
+Format the file tree as a text-based tree structure, using indentation to represent directory nesting. Always start with "project-root/" as the top-level directory. For example:
 
 project-root/
 ├── .gitignore
@@ -71,7 +84,7 @@ project-root/
 │   └── index.test.js
 └── .env.example
 
-Ensure the tree structure reflects a clean, production-ready project setup without including any auto-generated or temporary files.`, projectDetails)
+Ensure the tree structure reflects a clean, production-ready project setup without including any auto-generated or temporary files. Remember to always use "project-root/" as the root directory name, regardless of the actual project name.`, projectDetails)
 }
 
 func getFileOrderPrompt(fileTree string) string {
@@ -88,7 +101,6 @@ Return your response as a JSON object with a single key named "files", whose val
     ".env",
     ".gitignore",
     "package.json",
-    "package-lock.json",
     "README.md",
     "src/config/config.js",
     "src/middleware/errorHandler.js",
@@ -145,7 +157,7 @@ File Tree:
 %s
 
 Please provide:
-The file operation commands to create all files in the project, including both directories and files.
+The file operation commands to create all files in the project, including both directories and files, EXCEPT for the project root directory.
 
 Format your response as a JSON object with a single key named "operations", whose value is an array of file operations. Each operation should have the following structure:
 {
@@ -161,9 +173,10 @@ Format your response as a JSON object with a single key named "operations", whos
 Valid operation types are: CREATE_DIR, CREATE_FILE
 
 Ensure that:
-1. All necessary parent directories are created before the file
+1. All necessary parent directories are created before the file, except for the project root
 2. The operations follow the structure and conventions specified in the project details and file tree
 3. No actual file content is included in these operations
+4. Do NOT include a CREATE_DIR operation for the project root ("project-root/")
 
 The operations should only set up the file structure. File content will be generated separately.
 

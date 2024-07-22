@@ -27,7 +27,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	// Set default values
 	v.SetDefault("output_dir", ".")
 	v.SetDefault("temp_dir", os.TempDir())
-	v.SetDefault("model_name", "gpt-4o-mini")
+	v.SetDefault("model_name", "gpt-4o")
 	v.SetDefault("git_repo", true)
 	v.SetDefault("git_ignore", true)
 	v.SetDefault("readme", true)
@@ -55,8 +55,8 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	// Set specific environment variable names
 	v.BindEnv("openai_api_key", "OPENAI_API_KEY")
-	v.BindEnv("output_dir", "BOILERPLATE_OUTPUT_DIR")
-	v.BindEnv("temp_dir", "BOILERPLATE_TEMP_DIR")
+	v.BindEnv("output_dir", "BOIL_OUTPUT_DIR")
+	v.BindEnv("temp_dir", "BOIL_TEMP_DIR")
 	v.BindEnv("model_name", "BOILERPLATE_MODEL_NAME")
 
 	var config Config

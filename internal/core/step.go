@@ -5,6 +5,8 @@ import (
 	"boil/internal/llm"
 	"boil/internal/tempdir"
 	"boil/internal/utils"
+
+	"github.com/rs/zerolog"
 )
 
 type Step interface {
@@ -23,4 +25,5 @@ type State struct {
 	FinalDir       string
 	Config         *config.Config
 	LLM            *llm.Client
+	Logger         *zerolog.Logger
 }
