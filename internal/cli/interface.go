@@ -33,7 +33,7 @@ type model struct {
 	spinner         spinner.Model
 	prompt          string
 	projectDesc     string
-	tmpDir          string
+	outDir          string
 	state           state
 	err             error
 	confirmation    string
@@ -146,9 +146,9 @@ func (m model) View() string {
 		return output.String()
 	case Confirm:
 		return fmt.Sprintf(
-			"Project generated in temporary directory: %s\n"+
+			"Project generated in directory: %s\n"+
 				"Review the project and enter 'y' to finalize, or 'n' to abort: ",
-			m.tmpDir,
+			m.outDir,
 		)
 	case Finalizing:
 		return "Finalizing project..."
@@ -228,7 +228,7 @@ func (m *model) updateConfig() {
 func (m *model) startProjectGeneration() tea.Msg {
 	var err error
 	m.logger.Info().Msg("Generating project...")
-	m.tmpDir, err = m.engine.Generate(m.projectDesc)
+	m.outDir, err = m.engine.Generate(m.projectDesc)
 	if err != nil {
 		m.logger.Error().Err(err).Msg("Error generating project")
 		return fmt.Errorf("error generating project: %w", err)

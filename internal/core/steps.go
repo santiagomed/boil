@@ -173,7 +173,7 @@ type FinalizeProjectStep struct{}
 
 func (s *FinalizeProjectStep) Execute(state *State) error {
 	state.Logger.Info().Msg("Finalizing project...")
-	projectName := utils.FormatProjectName(filepath.Base(state.FinalDir))
+	projectName := utils.FormatProjectName(filepath.Base(state.Config.OutputDir))
 	finalPath := filepath.Join(state.Config.OutputDir, projectName)
 
 	state.Logger.Printf("Moving project from %s to %s\n", state.TempDirPath, finalPath)
@@ -182,7 +182,6 @@ func (s *FinalizeProjectStep) Execute(state *State) error {
 		return fmt.Errorf("failed to move project to final directory: %w", err)
 	}
 
-	state.FinalDir = finalPath
 	state.Logger.Info().Msg("Project finalized successfully")
 	return nil
 }

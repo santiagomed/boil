@@ -32,7 +32,7 @@ func (e *Engine) Generate(projectDesc string) (string, error) {
 		return "", err
 	}
 
-	return e.pipeline.state.FinalDir, nil
+	return e.pipeline.state.Config.OutputDir, nil
 }
 
 func (e *Engine) CleanupTempDir() error {

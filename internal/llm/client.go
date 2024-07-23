@@ -130,6 +130,10 @@ func (c *Client) getCompletion(prompt string, responseType openai.ChatCompletion
 			Model: c.config.ModelName,
 			Messages: []openai.ChatCompletionMessage{
 				{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: getSystemPrompt(),
+				},
+				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
 				},
@@ -161,7 +165,7 @@ func (c *Client) getCompletion(prompt string, responseType openai.ChatCompletion
 	}
 
 	res := resp.Choices[0].Message.Content
-	c.tellmClient.Log(prompt, res)
+	c.tellmClient.Log(c.config.OutputDir, prompt, res)
 
 	return res, nil
 }

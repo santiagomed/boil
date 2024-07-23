@@ -83,6 +83,8 @@ github.com/sagikazarmark/slog-shim v0.1.0 h1:diDBnUNK9N/354PgrxMywXnAwEr1QZcOr6g
 github.com/sagikazarmark/slog-shim v0.1.0/go.mod h1:SrcSrq8aKtyuqEI1uvTDTK1arOWRIczQRv+GVI1AkeQ=
 github.com/santiagomed/tellm v0.0.0-20240721080954-7f998aab2538 h1:i+SXtUKXuAfOfLrDw0RSrRLSxF8FVsIoiaqqsliADmA=
 github.com/santiagomed/tellm v0.0.0-20240721080954-7f998aab2538/go.mod h1:Kh31Gf9774borPJFf+4I9gLJhhGv6NX724HHOJNQ+18=
+github.com/santiagomed/tellm v0.0.0-20240723014237-740fd2be0999 h1:CWd3leh/vfdP67bcy3imt3ga9dUrg5oPayXMiMrOil8=
+github.com/santiagomed/tellm v0.0.0-20240723014237-740fd2be0999/go.mod h1:Kh31Gf9774borPJFf+4I9gLJhhGv6NX724HHOJNQ+18=
 github.com/sashabaranov/go-openai v1.26.3 h1:Tjnh4rcvsSU68f66r05mys+Zou4vo4qyvkne6AIRJPI=
 github.com/sashabaranov/go-openai v1.26.3/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
 github.com/sourcegraph/conc v0.3.0 h1:OQTbbt6P72L20UqAkXXuLOj79LfEanQ+YQFNpLA9ySo=

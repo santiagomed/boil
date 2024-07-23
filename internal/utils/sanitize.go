@@ -49,7 +49,6 @@ func IsValidProjectName(name string) bool {
 	return matched
 }
 
-// FormatProjectName formats the project name to be valid
 func FormatProjectName(name string) string {
 	// Replace spaces and other invalid characters with hyphens
 	reg := regexp.MustCompile(`[^a-zA-Z0-9\-_]`)
@@ -58,8 +57,8 @@ func FormatProjectName(name string) string {
 	// Remove leading hyphens or underscores
 	formatted = strings.TrimLeft(formatted, "-_")
 
-	// If the name starts with a number, prepend "project-"
-	if strings.IndexAny(formatted[0:1], "0123456789") == 0 {
+	// If the name is not empty and starts with a number, prepend "project-"
+	if len(formatted) > 0 && strings.IndexAny(formatted[0:1], "0123456789") == 0 {
 		formatted = "project-" + formatted
 	}
 

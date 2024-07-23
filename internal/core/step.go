@@ -22,7 +22,6 @@ type State struct {
 	FileOperations []utils.FileOperation
 	FileOrder      []string
 	PreviousFiles  map[string]string
-	FinalDir       string
 	Config         *config.Config
 	LLM            *llm.Client
 	Logger         *zerolog.Logger
