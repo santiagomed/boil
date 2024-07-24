@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"boil/internal/config"
 	"boil/internal/core"
@@ -23,9 +24,46 @@ type state int
 const (
 	Input state = iota
 	Processing
+	Listening
 	Questions
 	Error
 )
+
+type finished struct {
+	err error
+}
+
+type CliStepPublisher struct {
+	stepChan  chan core.StepType
+	errorChan chan error
+	logger    *zerolog.Logger
+}
+
+func NewCliStepPublisher(logger *zerolog.Logger) *CliStepPublisher {
+	return &CliStepPublisher{
+		stepChan:  make(chan core.StepType, 100), // Buffer size of 100
+		errorChan: make(chan error, 10),          // Buffer size of 10
+		logger:    logger,
+	}
+}
+
+func (p *CliStepPublisher) PublishStep(step core.StepType) {
+	select {
+	case p.stepChan <- step:
+		p.logger.Debug().Msgf("Successfully published step: %v", step)
+	default:
+		p.logger.Warn().Msgf("Failed to publish step: %v. Channel full.", step)
+	}
+}
+
+func (p *CliStepPublisher) Error(step core.StepType, err error) {
+	select {
+	case p.errorChan <- err:
+		p.logger.Debug().Err(err).Msgf("Successfully published error for step: %v", step)
+	default:
+		p.logger.Warn().Err(err).Msgf("Failed to publish error for step: %v. Channel full.", step)
+	}
+}
 
 type model struct {
 	textInput       textinput.Model
@@ -35,13 +73,11 @@ type model struct {
 	state           state
 	config          *config.Config
 	currentQuestion int
+	lastStep        core.StepType
 	engine          *core.Engine
 	answers         []string
+	publisher       *CliStepPublisher
 	logger          *zerolog.Logger
-}
-
-type finished struct {
-	err error
 }
 
 func initialModel(name, prompt string) (model, error) {
@@ -53,7 +89,7 @@ func initialModel(name, prompt string) (model, error) {
 
 	logger := utils.GetLogger()
 
-	logger.Info().Msg("Initializing Boil CLI")
+	logger.Debug().Msg("Initializing Boil CLI")
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -65,8 +101,16 @@ func initialModel(name, prompt string) (model, error) {
 		config.ProjectName = name
 	}
 
-	llmClient := llm.NewClient(config)
-	engine := core.NewProjectEngine(config, llmClient, logger)
+	llmCfg := llm.LlmConfig{
+		OpenAIAPIKey: config.OpenAIAPIKey,
+		ModelName:    config.ModelName,
+		ProjectName:  config.ProjectName,
+	}
+	llmClient := llm.NewClient(&llmCfg)
+
+	publisher := NewCliStepPublisher(logger)
+
+	engine := core.NewProjectEngine(config, llmClient, publisher, logger)
 
 	if err != nil {
 		return model{}, fmt.Errorf("error loading configuration: %w", err)
@@ -81,6 +125,7 @@ func initialModel(name, prompt string) (model, error) {
 		projectDesc:     projectDesc,
 		config:          config,
 		engine:          engine,
+		publisher:       publisher,
 		currentQuestion: 0,
 	}, nil
 }
@@ -151,9 +196,34 @@ func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
 
 func (m *model) startProjectGeneration() tea.Cmd {
 	return func() tea.Msg {
-		m.logger.Info().Msg("Generating project...")
-		err := m.engine.Generate(m.projectDesc)
-		return finished{err}
+		m.logger.Debug().Msg("Generating project...")
+		go m.engine.Generate(m.projectDesc)
+		return nil
+	}
+}
+
+func (m *model) listenForSteps() tea.Cmd {
+	m.logger.Debug().Msg("Listening for project generation steps")
+	return func() tea.Msg {
+		select {
+		case step := <-m.publisher.stepChan:
+			m.logger.Debug().Msgf("Received step: %v", step)
+			m.lastStep = step
+			if m.lastStep == core.FinalizeProjectType {
+				return finished{err: nil}
+			}
+			return nil
+		case err := <-m.publisher.errorChan:
+			close(m.publisher.stepChan)
+			close(m.publisher.errorChan)
+			return finished{err: err}
+		case <-time.After(1000 * time.Millisecond):
+			// Do nothing, just wait a bit
+		}
+		// Schedule the next check
+		return tea.Tick(1000*time.Millisecond, func(t time.Time) tea.Msg {
+			return nil // or some custom message type if you prefer
+		})
 	}
 }
 
@@ -181,7 +251,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyEnter:
 				return m.handleInputEnter()
 			case tea.KeyCtrlC, tea.KeyEsc:
-				m.logger.Info().Msg("User exited the application")
+				m.logger.Debug().Msg("User exited the application")
 				return m, tea.Quit
 			}
 		case Questions:
@@ -190,7 +260,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.logger.Debug().Msg("User entered a response to a question")
 				return m.handleQuestionsEnter(m.textInput.Value())
 			case tea.KeyCtrlC, tea.KeyEsc:
-				m.logger.Info().Msg("User exited the application")
+				m.logger.Debug().Msg("User exited the application")
 				return m, tea.Quit
 			}
 		}
@@ -202,7 +272,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch m.state {
 	case Processing:
+		m.state = Listening
 		return m, m.startProjectGeneration()
+	case Listening:
+		return m, m.listenForSteps()
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
@@ -218,7 +291,32 @@ func (m model) View() string {
 			"(press enter to generate project or esc to quit)",
 		)
 	case Processing:
-		return fmt.Sprintf("%s Generating project... Please wait.", m.spinner.View())
+		return ""
+	case Listening:
+		steps := []struct {
+			present string
+			past    string
+		}{
+			{"Creating temporary directory.", "Created temporary directory."},
+			{"Generating project details.", "Generated project details."},
+			{"Generating file tree.", "Generated file tree."},
+			{"Generating file operations.", "Generated file operations."},
+			{"Executing file operations.", "Executed file operations."},
+			{"Determining file order.", "Determined file order."},
+			{"Generating file contents.", "Generated file contents."},
+			{"Creating optional components.", "Created optional components."},
+			{"Done.", "Done."},
+		}
+		var output strings.Builder
+		for i, step := range steps {
+			if i <= int(m.lastStep) {
+				output.WriteString(fmt.Sprintf("[✔️] %s\n", step.past))
+			} else if i == int(m.lastStep)+1 {
+				output.WriteString(fmt.Sprintf("%s %s", m.spinner.View(), step.present))
+			}
+		}
+
+		return output.String()
 	case Questions:
 		questions := []string{
 			"Do you want to initialize a git repository?",

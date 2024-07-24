@@ -5,6 +5,8 @@ import (
 	"boil/internal/llm"
 	"boil/internal/tempdir"
 	"boil/internal/utils"
+	"fmt"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -12,6 +14,20 @@ import (
 type Step interface {
 	Execute(state *State) error
 }
+
+type StepType int
+
+const (
+	CreateTempDirType StepType = iota
+	GenerateProjectDetailsType
+	GenerateFileTreeType
+	GenerateFileOperationsType
+	ExecuteFileOperationsType
+	DetermineFileOrderType
+	GenerateFileContentsType
+	CreateOptionalComponentsType
+	FinalizeProjectType
+)
 
 type State struct {
 	ProjectDesc    string
@@ -23,39 +39,70 @@ type State struct {
 	FileOrder      []string
 	PreviousFiles  map[string]string
 	Config         *config.Config
-	LLM            *llm.Client
+	Llm            *llm.Client
 	Logger         *zerolog.Logger
 }
 
 type Pipeline struct {
-	steps []Step
-	state *State
+	steps     []StepType
+	state     *State
+	publisher StepPublisher
 }
 
-func NewPipeline(config *config.Config, llm *llm.Client, logger *zerolog.Logger) *Pipeline {
+func NewPipeline(config *config.Config, llm *llm.Client, pub StepPublisher, logger *zerolog.Logger) *Pipeline {
 	return &Pipeline{
-		steps: []Step{},
 		state: &State{
 			Config:        config,
-			LLM:           llm,
+			Llm:           llm,
 			PreviousFiles: make(map[string]string),
 			Logger:        logger,
 		},
+		publisher: pub,
 	}
 }
 
-func (p *Pipeline) AddStep(step Step) {
+func (p *Pipeline) AddStep(step StepType) {
 	p.steps = append(p.steps, step)
 }
 
-func (p *Pipeline) Execute(projectDesc string) error {
+func (p *Pipeline) Execute(projectDesc string) {
 	p.state.ProjectDesc = projectDesc
+	p.state.Logger.Debug().Msg("Starting pipeline execution")
 
-	for _, step := range p.steps {
+	for i, stepType := range p.steps {
+		p.state.Logger.Debug().Msgf("Attempting to execute step %d: %v", i, stepType)
+		step := GetStep(stepType)
+		if step == nil {
+			p.state.Logger.Error().Msgf("Step %v not found", stepType)
+			p.publisher.Error(stepType, fmt.Errorf("step %v not found", stepType))
+			return
+		}
+
+		startTime := time.Now()
 		if err := step.Execute(p.state); err != nil {
-			return err
+			p.state.Logger.Error().Err(err).Msgf("Error executing step %v", stepType)
+			p.publisher.Error(stepType, err)
+			return
+		}
+		duration := time.Since(startTime)
+		p.state.Logger.Debug().Msgf("Step %v completed in %v", stepType, duration)
+		p.publisher.PublishStep(stepType)
+
+		if i < len(p.steps)-1 {
+			p.state.Logger.Debug().Msgf("Transitioning from step %v to step %v", stepType, p.steps[i+1])
 		}
 	}
 
-	return nil
+	p.state.Logger.Debug().Msg("Pipeline execution completed")
 }
+
+type StepPublisher interface {
+	PublishStep(step StepType)
+	Error(step StepType, err error)
+}
+
+type DefaultStepPublisher struct{}
+
+func (p *DefaultStepPublisher) PublishStep(step StepType) {}
+
+func (p *DefaultStepPublisher) Error(step StepType, err error) {}
