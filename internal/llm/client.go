@@ -165,7 +165,7 @@ func (c *Client) getCompletion(prompt string, responseType openai.ChatCompletion
 	}
 
 	res := resp.Choices[0].Message.Content
-	c.tellmClient.Log(c.config.OutputDir, prompt, res)
+	c.tellmClient.Log(c.config.ProjectName, prompt, res)
 
 	return res, nil
 }

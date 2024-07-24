@@ -24,8 +24,7 @@ const (
 	Input state = iota
 	Processing
 	Questions
-	Confirm
-	Finalizing
+	Error
 )
 
 type model struct {
@@ -33,10 +32,7 @@ type model struct {
 	spinner         spinner.Model
 	prompt          string
 	projectDesc     string
-	outDir          string
 	state           state
-	err             error
-	confirmation    string
 	config          *config.Config
 	currentQuestion int
 	engine          *core.Engine
@@ -44,7 +40,11 @@ type model struct {
 	logger          *zerolog.Logger
 }
 
-func initialModel(prompt string) model {
+type finished struct {
+	err error
+}
+
+func initialModel(name, prompt string) (model, error) {
 	ti := textinput.New()
 	ti.Placeholder = "Describe your project..."
 	ti.Focus()
@@ -59,17 +59,115 @@ func initialModel(prompt string) model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
-	return model{
-		textInput: ti,
-		spinner:   s,
-		prompt:    prompt,
-		state:     Input,
-		logger:    logger,
+	projectDesc := utils.SanitizeInput(prompt)
+	config, err := config.LoadConfig("")
+	if name != "" {
+		config.ProjectName = name
 	}
+
+	llmClient := llm.NewClient(config)
+	engine := core.NewProjectEngine(config, llmClient, logger)
+
+	if err != nil {
+		return model{}, fmt.Errorf("error loading configuration: %w", err)
+	}
+
+	return model{
+		textInput:       ti,
+		spinner:         s,
+		prompt:          prompt,
+		state:           Input,
+		logger:          logger,
+		projectDesc:     projectDesc,
+		config:          config,
+		engine:          engine,
+		currentQuestion: 0,
+	}, nil
 }
 
 func (m model) Init() tea.Cmd {
 	return textinput.Blink
+}
+
+func (m model) handleInputEnter() (tea.Model, tea.Cmd) {
+	if m.state != Input {
+		return m, nil
+	}
+	v := m.textInput.Value()
+
+	// No input, quit.
+	if v == "" {
+		placeholderStyle := lipgloss.NewStyle().Faint(true)
+		message := "No project description entered. Exiting..."
+		message = placeholderStyle.Render(message)
+		return m, tea.Sequence(tea.Printf("%s", message), tea.Quit)
+	}
+	// Input, run query.
+	m.textInput.SetValue("")
+	m.projectDesc = v
+	m.state = Questions
+	placeholderStyle := lipgloss.NewStyle().Faint(true).Width(80)
+	message := placeholderStyle.Render(fmt.Sprintf("> %s", v))
+	return m, tea.Sequence(tea.Printf("%s", message), m.spinner.Tick)
+}
+
+func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
+	answer = strings.ToLower(answer)
+
+	if answer != "y" && answer != "n" && answer != "b" {
+		return m, nil
+	}
+
+	if answer == "b" && m.currentQuestion > 0 {
+		m.currentQuestion--
+		m.answers = m.answers[:len(m.answers)-1]
+		return m, nil
+	}
+
+	m.answers = append(m.answers, answer)
+
+	switch m.currentQuestion {
+	case 0:
+		m.config.GitRepo = answer == "y"
+	case 1:
+		m.config.GitIgnore = answer == "y"
+	case 2:
+		m.config.Readme = answer == "y"
+	case 3:
+		m.config.Dockerfile = answer == "y"
+	}
+
+	m.currentQuestion++
+	m.textInput.SetValue("")
+
+	if m.currentQuestion >= 4 {
+		m.updateConfig()
+		m.state = Processing
+		return m, func() tea.Msg { return nil }
+	}
+
+	return m, tea.Batch(textinput.Blink, func() tea.Msg { return nil })
+}
+
+func (m *model) startProjectGeneration() tea.Cmd {
+	return func() tea.Msg {
+		m.logger.Info().Msg("Generating project...")
+		err := m.engine.Generate(m.projectDesc)
+		return finished{err}
+	}
+}
+
+func (m *model) handleOutput(err error) (tea.Model, tea.Cmd) {
+	if err != nil {
+		m.logger.Error().Err(err).Msg("Error generating project")
+		return m, tea.Sequence(tea.Printf("Error generating project: %s", err), tea.Quit)
+	}
+
+	placeholderStyle := lipgloss.NewStyle().Faint(true)
+	message := fmt.Sprintf("Project generated in directory: %s", m.config.ProjectName)
+	message = placeholderStyle.Render(message)
+	m.engine.CleanupTempDir()
+	return m, tea.Sequence(tea.Printf("%s", message), tea.Quit)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -81,10 +179,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case Input:
 			switch msg.Type {
 			case tea.KeyEnter:
-				m.projectDesc = m.textInput.Value()
-				m.textInput.SetValue("")
-				m.logger.Info().Msg("Project description entered: " + m.projectDesc)
-				return m.setup()
+				return m.handleInputEnter()
 			case tea.KeyCtrlC, tea.KeyEsc:
 				m.logger.Info().Msg("User exited the application")
 				return m, tea.Quit
@@ -92,25 +187,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case Questions:
 			switch msg.Type {
 			case tea.KeyEnter:
-				answer := m.textInput.Value()
-				m.textInput.SetValue("")
-				return m.handleQuestions(answer)
+				m.logger.Debug().Msg("User entered a response to a question")
+				return m.handleQuestionsEnter(m.textInput.Value())
 			case tea.KeyCtrlC, tea.KeyEsc:
-				return m, tea.Quit
-			}
-		case Confirm:
-			switch msg.String() {
-			case "y", "Y":
-				m.confirmation = "y"
-				m.state = Finalizing
-				return m.finalizeProject()
-			case "n", "N", "q", "Q":
+				m.logger.Info().Msg("User exited the application")
 				return m, tea.Quit
 			}
 		}
+	case finished:
+		return m.handleOutput(msg.err)
 	case error:
-		m.err = msg
-		return m, tea.Quit
+		return m, tea.Sequence(tea.Printf("Error: %s", msg), tea.Quit)
+	}
+
+	switch m.state {
+	case Processing:
+		return m, m.startProjectGeneration()
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
@@ -144,78 +236,10 @@ func (m model) View() string {
 		}
 		output.WriteString("\n(Enter 'b' to go back, or 'esc' to quit)")
 		return output.String()
-	case Confirm:
-		return fmt.Sprintf(
-			"Project generated in directory: %s\n"+
-				"Review the project and enter 'y' to finalize, or 'n' to abort: ",
-			m.outDir,
-		)
-	case Finalizing:
-		return "Finalizing project..."
 	default:
 		m.logger.Error().Msg("An error occurred")
 		return "An error occurred."
 	}
-}
-
-func (m *model) setup() (tea.Model, tea.Cmd) {
-	var err error
-
-	m.projectDesc = utils.SanitizeInput(m.projectDesc)
-	m.logger.Info().Str("Sanitized project description", m.projectDesc).Msg("Project description sanitized")
-
-	m.config, err = config.LoadConfig("")
-	if err != nil {
-		m.logger.Error().Err(err).Msg("Error loading configuration")
-		m.err = fmt.Errorf("error loading configuration: %w", err)
-	}
-
-	llmClient := llm.NewClient(m.config)
-	m.engine = core.NewProjectEngine(m.config, llmClient, m.logger)
-
-	m.state = Questions
-	m.currentQuestion = 0
-	m.textInput.Placeholder = "Enter y/n"
-	m.textInput.CharLimit = 1
-
-	return m, tea.Batch(textinput.Blink, func() tea.Msg { return nil })
-}
-
-func (m *model) handleQuestions(answer string) (tea.Model, tea.Cmd) {
-	answer = strings.ToLower(answer)
-
-	if answer != "y" && answer != "n" && answer != "b" {
-		return m, nil
-	}
-
-	if answer == "b" && m.currentQuestion > 0 {
-		m.currentQuestion--
-		m.answers = m.answers[:len(m.answers)-1]
-		return m, nil
-	}
-
-	m.answers = append(m.answers, answer)
-
-	switch m.currentQuestion {
-	case 0:
-		m.config.GitRepo = answer == "y"
-	case 1:
-		m.config.GitIgnore = answer == "y"
-	case 2:
-		m.config.Readme = answer == "y"
-	case 3:
-		m.config.Dockerfile = answer == "y"
-	}
-
-	m.currentQuestion++
-
-	if m.currentQuestion >= 4 {
-		m.updateConfig()
-		m.state = Processing
-		return m, m.startProjectGeneration
-	}
-
-	return m, tea.Batch(textinput.Blink, func() tea.Msg { return nil })
 }
 
 func (m *model) updateConfig() {
@@ -225,36 +249,23 @@ func (m *model) updateConfig() {
 	m.config.Dockerfile = m.answers[3] == "y"
 }
 
-func (m *model) startProjectGeneration() tea.Msg {
-	var err error
-	m.logger.Info().Msg("Generating project...")
-	m.outDir, err = m.engine.Generate(m.projectDesc)
-	if err != nil {
-		m.logger.Error().Err(err).Msg("Error generating project")
-		return fmt.Errorf("error generating project: %w", err)
-	}
-
-	m.state = Confirm
-	return nil
-}
-
-func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
-	err := m.engine.CleanupTempDir()
-	if err != nil {
-		m.logger.Error().Err(err).Msg("Error cleaning up temporary directory")
-		m.err = fmt.Errorf("error finalizing project: %w", err)
-		return m, tea.Quit
-	}
-	return m, tea.Quit
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "boil",
 	Short: "Boil is a CLI tool for generating project boilerplate files",
 	Long:  `Boil is a powerful CLI tool that uses AI to generate custom project boilerplate files based on your description.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		prompt := strings.Join(args, " ")
-		p := tea.NewProgram(initialModel(prompt))
+		name, err := cmd.Flags().GetString("name")
+		if err != nil {
+			fmt.Printf("Error: %v", err)
+			os.Exit(1)
+		}
+		model, err := initialModel(name, prompt)
+		if err != nil {
+			fmt.Printf("Error: %v", err)
+			os.Exit(1)
+		}
+		p := tea.NewProgram(model)
 		if _, err := p.Run(); err != nil {
 			fmt.Printf("Error: %v", err)
 			os.Exit(1)
@@ -263,7 +274,7 @@ var rootCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.Flags().StringP("output", "o", ".", "Output directory for the generated project")
+	rootCmd.Flags().StringP("name", "n", "", "The name of the project to generate. Also used as the project directory name")
 	rootCmd.Flags().StringP("config", "c", "", "Path to custom configuration file")
 }
 

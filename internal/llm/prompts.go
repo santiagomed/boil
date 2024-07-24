@@ -56,32 +56,111 @@ Please provide a file tree structure that includes:
 1. Essential directories for the project structure
 2. Core source code files
 3. Configuration files
-4. README and other documentation files
+4. Vital package files (e.g., package.json, go.mod, requirements.txt)
 
 Do NOT include:
 1. Package manager lock files (e.g., package-lock.json, yarn.lock)
 2. Build output directories (e.g., /dist, /build)
-3. Dependency directories (e.g., /node_modules)
+3. Dependency directories (e.g., /node_modules, /venv)
 4. IDE or editor-specific files or directories
 5. Temporary or cache files
 6. Any files that would be automatically generated during build or runtime
+7. Dockerfile
+8. README or other documentation files
+9. .gitignore
 
-Format the file tree as a text-based tree structure, using indentation to represent directory nesting. Always start with "project-root/" as the top-level directory. For example:
+Format the file tree as a text-based tree structure, using indentation to represent directory nesting. Always start with "project-root/" as the top-level directory.
 
+Here are examples for different programming languages:
+
+Python project:
 project-root/
-├── .gitignore
-├── README.md
+├── requirements.txt
+├── setup.py
+├── src/
+│   ├── __init__.py
+│   ├── main.py
+│   └── utils/
+│       ├── __init__.py
+│       └── helpers.py
+├── tests/
+│   ├── __init__.py
+│   └── test_main.py
+└── .env.example
+
+Go project:
+project-root/
+├── go.mod
+├── go.sum
+├── cmd/
+│   └── main.go
+├── internal/
+│   ├── app/
+│   │   └── app.go
+│   └── config/
+│       └── config.go
+├── pkg/
+│   └── utils/
+│       └── helpers.go
+└── test/
+    └── app_test.go
+
+Node.js project:
+project-root/
+├── package.json
 ├── src/
 │   ├── index.js
 │   ├── config/
 │   │   └── config.js
 │   └── utils/
-│       └── helper.js
-├── tests/
+│       └── helpers.js
+├── test/
 │   └── index.test.js
 └── .env.example
 
-Ensure the tree structure reflects a clean, production-ready project setup without including any auto-generated or temporary files. Remember to always use "project-root/" as the root directory name, regardless of the actual project name.`, projectDetails)
+Java project:
+project-root/
+├── pom.xml
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── com/
+│   │   │       └── example/
+│   │   │           ├── App.java
+│   │   │           └── utils/
+│   │   │               └── Helpers.java
+│   │   └── resources/
+│   │       └── application.properties
+│   └── test/
+│       └── java/
+│           └── com/
+│               └── example/
+│                   └── AppTest.java
+
+Ruby project:
+project-root/
+├── Gemfile
+├── lib/
+│   ├── main.rb
+│   └── utils/
+│       └── helpers.rb
+├── spec/
+│   └── main_spec.rb
+└── config/
+    └── environment.rb
+
+Rust project:
+project-root/
+├── Cargo.toml
+├── src/
+│   ├── main.rs
+│   ├── lib.rs
+│   └── utils/
+│       └── mod.rs
+└── tests/
+    └── integration_test.rs
+
+Ensure the tree structure reflects a clean, production-ready project setup without including any auto-generated or temporary files. Remember to always use "project-root/" as the root directory name, regardless of the actual project name. Adjust the file tree based on the specific project details provided, using these examples as a guide for the appropriate structure for each language or framework.`, projectDetails)
 }
 
 func getFileOrderPrompt(fileTree string) string {
@@ -89,27 +168,27 @@ func getFileOrderPrompt(fileTree string) string {
 
 %s
 
-Provide an ordered list of files to be created, considering dependencies and logical progression.
+Provide an ordered list of files to be created, considering the following criteria:
+1. Dependencies: Files that are required by other files should be created first.
+2. Configuration: Config files should generally be created early in the process.
+3. Core structure: Create base directories before files within them.
+4. Logical progression: Follow a natural development flow (e.g., main application file after its imports).
+5. Testing: Test files typically come after the files they are testing.
 
-Return your response as a JSON object with a single key named "files", whose value is an array of file paths, relative to the project root. Each file path should be a string. Do not include any explanations or comments. For example:
+Rules:
+- Include ALL files from the given file tree, even if they might be auto-generated later.
+- Use forward slashes (/) for path separators, regardless of the operating system.
+- Include directories only if they are empty in the final structure.
+- File paths should be relative to the project root.
+- The order should reflect a practical sequence for setting up the project from scratch.
+
+Return your response as a JSON object with a single key named "files", whose value is an array of file paths. Each file path should be a string. The JSON must be valid and directly parsable. Do not include any explanations, comments, or extra whitespace. For example:
 
 {
-  "files": [
-    ".env",
-    ".gitignore",
-    "package.json",
-    "README.md",
-    "src/config/config.js",
-    "src/middleware/errorHandler.js",
-    "src/routes/index.js",
-    "src/server.js",
-    "scripts/start.js",
-    "scripts/dev.js",
-    "tests/server.test.js"
-  ]
+"files":[".env","package.json","src/config/config.js","src/utils/helpers.js","src/index.js","tests/helpers.test.js","tests/index.test.js"]
 }
 
-Ensure the JSON is valid and can be directly parsed. The key MUST be named "files".`, fileTree)
+The key MUST be named "files"`, fileTree)
 }
 
 func getFileContentPrompt(filePath, projectDetails, fileTree string, previousFiles map[string]string) string {

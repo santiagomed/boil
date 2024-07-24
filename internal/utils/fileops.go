@@ -179,14 +179,6 @@ func MoveDir(src, dst string) error {
 	return nil
 }
 
-// CreateGitIgnore creates a .gitignore file in the given directory
-func CreateGitIgnore(dir string) error {
-	gitignorePath := filepath.Join(dir, ".gitignore")
-	content := `# Ignore build files` // TODO: Add more content
-
-	return WriteFile(gitignorePath, content)
-}
-
 // InitializeGitRepo initializes a git repository in the given directory
 func InitializeGitRepo(dir string) error {
 	_, err := ExecuteCmd(dir, "git", "init")

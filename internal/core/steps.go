@@ -4,6 +4,7 @@ import (
 	"boil/internal/tempdir"
 	"boil/internal/utils"
 	"fmt"
+	"os"
 	"path/filepath"
 )
 
@@ -130,7 +131,12 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Config.GitIgnore {
 		state.Logger.Info().Msg("Creating .gitignore file...")
-		if err := utils.CreateGitIgnore(state.TempDirPath); err != nil {
+		gitignore, err := state.LLM.GenerateGitignoreContent(state.ProjectDetails)
+		if err != nil {
+			state.Logger.Error().Err(err).Msg("Failed to create .gitignore file")
+			return fmt.Errorf("failed to create .gitignore file: %w", err)
+		}
+		if err := utils.WriteFile(filepath.Join(state.TempDirPath, ".gitignore"), gitignore); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create .gitignore file")
 			return fmt.Errorf("failed to create .gitignore file: %w", err)
 		}
@@ -173,9 +179,15 @@ type FinalizeProjectStep struct{}
 
 func (s *FinalizeProjectStep) Execute(state *State) error {
 	state.Logger.Info().Msg("Finalizing project...")
-	projectName := utils.FormatProjectName(filepath.Base(state.Config.OutputDir))
-	finalPath := filepath.Join(state.Config.OutputDir, projectName)
+	projectName := utils.FormatProjectName(state.Config.ProjectName)
 
+	outDir, err := os.Getwd()
+	if err != nil {
+		state.Logger.Error().Err(err).Msg("Failed to get current working directory")
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
+
+	finalPath := filepath.Join(outDir, projectName)
 	state.Logger.Printf("Moving project from %s to %s\n", state.TempDirPath, finalPath)
 	if err := utils.MoveDir(state.TempDirPath, finalPath); err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to move project to final directory")

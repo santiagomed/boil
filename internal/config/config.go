@@ -3,14 +3,14 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/viper"
 )
 
 // Config stores all configuration of the application.
 type Config struct {
-	OutputDir    string `mapstructure:"output_dir"`
+	ProjectName string `mapstructure:"project_name"`
+	// OutputDir    string `mapstructure:"output_dir"`
 	TempDir      string `mapstructure:"temp_dir"`
 	OpenAIAPIKey string `mapstructure:"openai_api_key"`
 	ModelName    string `mapstructure:"model_name"`
@@ -25,9 +25,9 @@ func LoadConfig(configPath string) (*Config, error) {
 	v := viper.New()
 
 	// Set default values
-	v.SetDefault("output_dir", ".")
+	v.SetDefault("project_name", "my-project")
 	v.SetDefault("temp_dir", os.TempDir())
-	v.SetDefault("model_name", "gpt-4o")
+	v.SetDefault("model_name", "gpt-4o-mini")
 	v.SetDefault("git_repo", true)
 	v.SetDefault("git_ignore", true)
 	v.SetDefault("readme", true)
@@ -66,81 +66,4 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	return &config, nil
-}
-
-var globalConfig *Config
-
-// InitConfig initializes the global configuration
-func InitConfig(configPath string) error {
-	config, err := LoadConfig(configPath)
-	if err != nil {
-		return err
-	}
-	globalConfig = config
-	return nil
-}
-
-// GetConfig returns the global configuration
-func GetConfig() *Config {
-	if globalConfig == nil {
-		panic("Config not initialized. Call InitConfig() before using GetConfig().")
-	}
-	return globalConfig
-}
-
-// GetOpenAIAPIKey returns the OpenAI API key
-func GetOpenAIAPIKey() string {
-	return GetConfig().OpenAIAPIKey
-}
-
-// GetOutputDir returns the output directory
-func GetOutputDir() string {
-	return GetConfig().OutputDir
-}
-
-// GetTempDir returns the temporary directory
-func GetTempDir() string {
-	return GetConfig().TempDir
-}
-
-// GetModelName returns the model name
-func GetModelName() string {
-	return GetConfig().ModelName
-}
-
-// CreateDefaultConfig creates a default configuration file
-func CreateDefaultConfig() error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("unable to get home directory: %w", err)
-	}
-
-	configDir := filepath.Join(homeDir, ".boilerplate")
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return fmt.Errorf("unable to create config directory: %w", err)
-	}
-
-	configPath := filepath.Join(configDir, "config.yaml")
-
-	defaultConfig := `# Boilerplate CLI Configuration
-
-# OpenAI API Key (required)
-# openai_api_key: "your-api-key-here"
-
-# Output directory for generated projects (optional, default: current directory)
-# output_dir: "."
-
-# Temporary directory for project generation (optional, default: system temp directory)
-# temp_dir: "/tmp"
-
-# Model name to use for generation (optional, default: gpt-3.5-turbo)
-# model_name: "gpt-3.5-turbo"
-`
-
-	if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
-		return fmt.Errorf("unable to write default config file: %w", err)
-	}
-
-	fmt.Printf("Default configuration file created at: %s\n", configPath)
-	return nil
 }
