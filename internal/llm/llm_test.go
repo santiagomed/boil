@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"boil/internal/config"
 	"boil/internal/utils"
 )
 
@@ -45,17 +44,16 @@ func (c *Cache) Set(filename string, content string) error {
 func TestLlmSequential(t *testing.T) {
 	t.Log("Starting TestLlmSequential")
 
-	cfg, err := config.LoadConfig("")
-	if err != nil {
-		t.Fatalf("Error loading config: %v", err)
+	cfg := LlmConfig{
+		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
+		ModelName:    "gpt-4o-mini",
+		ProjectName:  "test-project",
 	}
-	t.Log("Config loaded successfully")
-
-	llmClient := NewClient(cfg)
+	llmClient := NewClient(&cfg)
 	t.Log("LLM client initialized")
 
 	outPath := "tmp/"
-	err = os.MkdirAll(outPath, 0755)
+	err := os.MkdirAll(outPath, 0755)
 	if err != nil {
 		t.Fatalf("Error creating temporary directory: %v", err)
 	}

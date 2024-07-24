@@ -1,28 +1,32 @@
 package llm
 
 import (
+	"boil/internal/utils"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 
-	"boil/internal/config" // Update this import path
-	"boil/internal/utils"
-
 	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"
 )
 
+type LlmConfig struct {
+	OpenAIAPIKey string
+	ModelName    string
+	ProjectName  string
+}
+
 // Client represents an LLM client
 type Client struct {
 	openAIClient *openai.Client
-	config       *config.Config
+	config       *LlmConfig
 	tellmClient  *tellm.Client
 }
 
 // NewClient creates a new LLM client
-func NewClient(cfg *config.Config) *Client {
+func NewClient(cfg *LlmConfig) *Client {
 	if cfg.OpenAIAPIKey == "" {
 		log.Fatal("OpenAI API key is not set")
 	}
