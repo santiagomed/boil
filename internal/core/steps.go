@@ -9,6 +9,7 @@ import (
 )
 
 var stepMap = map[StepType]Step{
+	InitialStepType:              &InitialStep{},
 	CreateTempDirType:            &CreateTempDir{},
 	GenerateProjectDetailsType:   &GenerateProjectDetails{},
 	GenerateFileTreeType:         &GenerateFileTree{},
@@ -22,6 +23,13 @@ var stepMap = map[StepType]Step{
 
 func GetStep(stepType StepType) Step {
 	return stepMap[stepType]
+}
+
+type InitialStep struct{}
+
+func (s *InitialStep) Execute(state *State) error {
+	state.Logger.Debug().Msg("Initializing pipeline execution.")
+	return nil
 }
 
 type CreateTempDir struct{}
@@ -113,13 +121,17 @@ type GenerateFileContents struct{}
 func (s *GenerateFileContents) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file contents.")
 	for _, file := range state.FileOrder {
+		path := filepath.Join(state.TempDirPath, file)
+		if utils.IsDir(path) || !utils.FileExists(path) {
+			continue
+		}
 		state.Logger.Debug().Msgf("Generating content for file %s.", file)
 		content, err := state.Llm.GenerateFileContent(file, state.ProjectDetails, state.FileTree, state.PreviousFiles)
 		if err != nil {
 			state.Logger.Error().Err(err).Msgf("Failed to generate content for file %s", file)
 			return fmt.Errorf("failed to generate content for file %s: %w", file, err)
 		}
-		err = utils.WriteFile(filepath.Join(state.TempDirPath, file), content)
+		err = utils.WriteFile(path, content)
 		if err != nil {
 			state.Logger.Error().Err(err).Msgf("Failed to create file %s", file)
 			return fmt.Errorf("failed to create file %s: %w", file, err)

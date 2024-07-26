@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"boil/internal/config"
 	"boil/internal/core"
@@ -24,9 +23,7 @@ type state int
 const (
 	Input state = iota
 	Processing
-	Listening
 	Questions
-	Error
 )
 
 type finished struct {
@@ -195,39 +192,23 @@ func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) startProjectGeneration() tea.Cmd {
+	go m.engine.Generate(m.projectDesc)
+
 	return func() tea.Msg {
-		m.logger.Debug().Msg("Generating project...")
-		go m.engine.Generate(m.projectDesc)
-		return nil
+		return listenForSteps(m.publisher.stepChan, m.publisher.errorChan)
 	}
 }
 
-func (m *model) listenForSteps() tea.Cmd {
-	m.logger.Debug().Msg("Listening for project generation steps")
-	return func() tea.Msg {
-		select {
-		case step := <-m.publisher.stepChan:
-			m.logger.Debug().Msgf("Received step: %v", step)
-			m.lastStep = step
-			if m.lastStep == core.FinalizeProjectType {
-				return finished{err: nil}
-			}
-			return nil
-		case err := <-m.publisher.errorChan:
-			close(m.publisher.stepChan)
-			close(m.publisher.errorChan)
-			return finished{err: err}
-		case <-time.After(1000 * time.Millisecond):
-			// Do nothing, just wait a bit
-		}
-		// Schedule the next check
-		return tea.Tick(1000*time.Millisecond, func(t time.Time) tea.Msg {
-			return nil // or some custom message type if you prefer
-		})
+func listenForSteps(stepChan <-chan core.StepType, errorChan <-chan error) tea.Msg {
+	select {
+	case step := <-stepChan:
+		return step
+	case err := <-errorChan:
+		return finished{err: err}
 	}
 }
 
-func (m *model) handleOutput(err error) (tea.Model, tea.Cmd) {
+func (m *model) finalizeProject(err error) (tea.Model, tea.Cmd) {
 	if err != nil {
 		m.logger.Error().Err(err).Msg("Error generating project")
 		return m, tea.Sequence(tea.Printf("Error generating project: %s", err), tea.Quit)
@@ -264,18 +245,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 		}
+	case core.StepType:
+		m.lastStep = msg
+		if m.lastStep == core.FinalizeProjectType {
+			return m, func() tea.Msg { return finished{err: nil} }
+		}
+		return m, func() tea.Msg {
+			return listenForSteps(m.publisher.stepChan, m.publisher.errorChan)
+		}
 	case finished:
-		return m.handleOutput(msg.err)
+		return m.finalizeProject(msg.err)
 	case error:
 		return m, tea.Sequence(tea.Printf("Error: %s", msg), tea.Quit)
 	}
 
 	switch m.state {
 	case Processing:
-		m.state = Listening
-		return m, m.startProjectGeneration()
-	case Listening:
-		return m, m.listenForSteps()
+		if m.lastStep == core.InitialStepType {
+			return m, m.startProjectGeneration()
+		}
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
@@ -291,8 +279,6 @@ func (m model) View() string {
 			"(press enter to generate project or esc to quit)",
 		)
 	case Processing:
-		return ""
-	case Listening:
 		steps := []struct {
 			present string
 			past    string
@@ -309,13 +295,12 @@ func (m model) View() string {
 		}
 		var output strings.Builder
 		for i, step := range steps {
-			if i <= int(m.lastStep) {
+			if i < int(m.lastStep) {
 				output.WriteString(fmt.Sprintf("[✔️] %s\n", step.past))
-			} else if i == int(m.lastStep)+1 {
-				output.WriteString(fmt.Sprintf("%s %s", m.spinner.View(), step.present))
+			} else if i == int(m.lastStep) {
+				output.WriteString(fmt.Sprintf("%s %s\n", m.spinner.View(), step.present))
 			}
 		}
-
 		return output.String()
 	case Questions:
 		questions := []string{

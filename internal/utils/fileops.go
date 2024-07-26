@@ -179,6 +179,21 @@ func MoveDir(src, dst string) error {
 	return nil
 }
 
+// FileExists checks if a file exists
+func FileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
+}
+
+// IsDir checks if a path is a directory
+func IsDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
 // InitializeGitRepo initializes a git repository in the given directory
 func InitializeGitRepo(dir string) error {
 	_, err := ExecuteCmd(dir, "git", "init")

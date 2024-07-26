@@ -18,7 +18,8 @@ type Step interface {
 type StepType int
 
 const (
-	CreateTempDirType StepType = iota
+	InitialStepType StepType = iota
+	CreateTempDirType
 	GenerateProjectDetailsType
 	GenerateFileTreeType
 	GenerateFileOperationsType

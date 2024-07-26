@@ -14,6 +14,7 @@ type Engine struct {
 func NewProjectEngine(config *config.Config, llm *llm.Client, pub StepPublisher, logger *zerolog.Logger) *Engine {
 	pipeline := NewPipeline(config, llm, pub, logger)
 
+	pipeline.AddStep(InitialStepType)
 	pipeline.AddStep(CreateTempDirType)
 	pipeline.AddStep(GenerateProjectDetailsType)
 	pipeline.AddStep(GenerateFileTreeType)
