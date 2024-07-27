@@ -22,6 +22,7 @@ type state int
 
 const (
 	Input state = iota
+	Initializing
 	Processing
 	Questions
 )
@@ -70,7 +71,7 @@ type model struct {
 	state           state
 	config          *config.Config
 	currentQuestion int
-	lastStep        core.StepType
+	completedSteps  []core.StepType
 	engine          *core.Engine
 	answers         []string
 	publisher       *CliStepPublisher
@@ -150,7 +151,7 @@ func (m model) handleInputEnter() (tea.Model, tea.Cmd) {
 	m.state = Questions
 	placeholderStyle := lipgloss.NewStyle().Faint(true).Width(80)
 	message := placeholderStyle.Render(fmt.Sprintf("> %s", v))
-	return m, tea.Sequence(tea.Printf("%s", message), m.spinner.Tick)
+	return m, tea.Printf("%s", message)
 }
 
 func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
@@ -184,7 +185,7 @@ func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
 
 	if m.currentQuestion >= 4 {
 		m.updateConfig()
-		m.state = Processing
+		m.state = Initializing
 		return m, func() tea.Msg { return nil }
 	}
 
@@ -193,10 +194,11 @@ func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
 
 func (m *model) startProjectGeneration() tea.Cmd {
 	go m.engine.Generate(m.projectDesc)
+	return m.listenForSteps
+}
 
-	return func() tea.Msg {
-		return listenForSteps(m.publisher.stepChan, m.publisher.errorChan)
-	}
+func (m *model) listenForSteps() tea.Msg {
+	return listenForSteps(m.publisher.stepChan, m.publisher.errorChan)
 }
 
 func listenForSteps(stepChan <-chan core.StepType, errorChan <-chan error) tea.Msg {
@@ -224,6 +226,14 @@ func (m *model) finalizeProject(err error) (tea.Model, tea.Cmd) {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
+	// If we're in the processing state and we're on the initial step, start the project generation.
+	// This should only happen once.
+	if m.state == Initializing {
+		m.logger.Debug().Msg("hello darkness my old friend")
+		m.state = Processing
+		return m, tea.Batch(m.spinner.Tick, m.startProjectGeneration())
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch m.state {
@@ -246,23 +256,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case core.StepType:
-		m.lastStep = msg
-		if m.lastStep == core.FinalizeProjectType {
+		m.completedSteps = append(m.completedSteps, msg)
+		m.logger.Debug().Msgf("Received step: %v", msg)
+		if m.completedSteps[len(m.completedSteps)-1] == core.FinalizeProject {
 			return m, func() tea.Msg { return finished{err: nil} }
 		}
-		return m, func() tea.Msg {
-			return listenForSteps(m.publisher.stepChan, m.publisher.errorChan)
-		}
+		return m, tea.Batch(m.spinner.Tick, m.listenForSteps)
 	case finished:
 		return m.finalizeProject(msg.err)
 	case error:
 		return m, tea.Sequence(tea.Printf("Error: %s", msg), tea.Quit)
-	}
-
-	switch m.state {
-	case Processing:
-		if m.lastStep == core.InitialStepType {
-			return m, m.startProjectGeneration()
+	default:
+		if m.state == Processing {
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
 		}
 	}
 
@@ -278,6 +285,8 @@ func (m model) View() string {
 			m.textInput.View(),
 			"(press enter to generate project or esc to quit)",
 		)
+	case Initializing:
+		return fmt.Sprintf("%s Initializing", m.spinner.View())
 	case Processing:
 		steps := []struct {
 			present string
@@ -295,10 +304,10 @@ func (m model) View() string {
 		}
 		var output strings.Builder
 		for i, step := range steps {
-			if i < int(m.lastStep) {
+			if i < len(m.completedSteps) {
 				output.WriteString(fmt.Sprintf("[✔️] %s\n", step.past))
-			} else if i == int(m.lastStep) {
-				output.WriteString(fmt.Sprintf("%s %s\n", m.spinner.View(), step.present))
+			} else if i == len(m.completedSteps) {
+				output.WriteString(fmt.Sprintf(" %s %s\n", m.spinner.View(), step.present))
 			}
 		}
 		return output.String()

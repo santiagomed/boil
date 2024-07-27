@@ -9,16 +9,15 @@ import (
 )
 
 var stepMap = map[StepType]Step{
-	InitialStepType:              &InitialStep{},
-	CreateTempDirType:            &CreateTempDir{},
-	GenerateProjectDetailsType:   &GenerateProjectDetails{},
-	GenerateFileTreeType:         &GenerateFileTree{},
-	GenerateFileOperationsType:   &GenerateFileOperations{},
-	ExecuteFileOperationsType:    &ExecuteFileOperations{},
-	DetermineFileOrderType:       &DetermineFileOrder{},
-	GenerateFileContentsType:     &GenerateFileContents{},
-	CreateOptionalComponentsType: &CreateOptionalComponents{},
-	FinalizeProjectType:          &FinalizeProject{},
+	CreateTempDir:            &CreateTempDirStep{},
+	GenerateProjectDetails:   &GenerateProjectDetailsStep{},
+	GenerateFileTree:         &GenerateFileTreeStep{},
+	GenerateFileOperations:   &GenerateFileOperationsStep{},
+	ExecuteFileOperations:    &ExecuteFileOperationsStep{},
+	DetermineFileOrder:       &DetermineFileOrderStep{},
+	GenerateFileContents:     &GenerateFileContentsStep{},
+	CreateOptionalComponents: &CreateOptionalComponentsStep{},
+	FinalizeProject:          &FinalizeProjectStep{},
 }
 
 func GetStep(stepType StepType) Step {
@@ -32,9 +31,9 @@ func (s *InitialStep) Execute(state *State) error {
 	return nil
 }
 
-type CreateTempDir struct{}
+type CreateTempDirStep struct{}
 
-func (s *CreateTempDir) Execute(state *State) error {
+func (s *CreateTempDirStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Creating temporary directory.")
 	state.TempDir = tempdir.NewManager(state.Config)
 	path, err := state.TempDir.CreateTempDir("boil")
@@ -47,9 +46,9 @@ func (s *CreateTempDir) Execute(state *State) error {
 	return nil
 }
 
-type GenerateProjectDetails struct{}
+type GenerateProjectDetailsStep struct{}
 
-func (s *GenerateProjectDetails) Execute(state *State) error {
+func (s *GenerateProjectDetailsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating project details.")
 	details, err := state.Llm.GenerateProjectDetails(state.ProjectDesc)
 	if err != nil {
@@ -61,9 +60,9 @@ func (s *GenerateProjectDetails) Execute(state *State) error {
 	return nil
 }
 
-type GenerateFileTree struct{}
+type GenerateFileTreeStep struct{}
 
-func (s *GenerateFileTree) Execute(state *State) error {
+func (s *GenerateFileTreeStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file tree.")
 	fileTree, err := state.Llm.GenerateFileTree(state.ProjectDetails)
 	if err != nil {
@@ -75,9 +74,9 @@ func (s *GenerateFileTree) Execute(state *State) error {
 	return nil
 }
 
-type GenerateFileOperations struct{}
+type GenerateFileOperationsStep struct{}
 
-func (s *GenerateFileOperations) Execute(state *State) error {
+func (s *GenerateFileOperationsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file operations.")
 	operations, err := state.Llm.GenerateFileOperations(state.ProjectDetails, state.FileTree)
 	if err != nil {
@@ -89,9 +88,9 @@ func (s *GenerateFileOperations) Execute(state *State) error {
 	return nil
 }
 
-type ExecuteFileOperations struct{}
+type ExecuteFileOperationsStep struct{}
 
-func (s *ExecuteFileOperations) Execute(state *State) error {
+func (s *ExecuteFileOperationsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Executing file operations.")
 	err := utils.ExecuteFileOperations(state.TempDirPath, state.FileOperations)
 	if err != nil {
@@ -102,9 +101,9 @@ func (s *ExecuteFileOperations) Execute(state *State) error {
 	return nil
 }
 
-type DetermineFileOrder struct{}
+type DetermineFileOrderStep struct{}
 
-func (s *DetermineFileOrder) Execute(state *State) error {
+func (s *DetermineFileOrderStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Determining file creation order.")
 	order, err := state.Llm.DetermineFileOrder(state.FileTree)
 	if err != nil {
@@ -116,9 +115,9 @@ func (s *DetermineFileOrder) Execute(state *State) error {
 	return nil
 }
 
-type GenerateFileContents struct{}
+type GenerateFileContentsStep struct{}
 
-func (s *GenerateFileContents) Execute(state *State) error {
+func (s *GenerateFileContentsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file contents.")
 	for _, file := range state.FileOrder {
 		path := filepath.Join(state.TempDirPath, file)
@@ -143,9 +142,9 @@ func (s *GenerateFileContents) Execute(state *State) error {
 	return nil
 }
 
-type CreateOptionalComponents struct{}
+type CreateOptionalComponentsStep struct{}
 
-func (s *CreateOptionalComponents) Execute(state *State) error {
+func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Creating optional components.")
 
 	if state.Config.GitRepo {
@@ -203,9 +202,9 @@ func (s *CreateOptionalComponents) Execute(state *State) error {
 	return nil
 }
 
-type FinalizeProject struct{}
+type FinalizeProjectStep struct{}
 
-func (s *FinalizeProject) Execute(state *State) error {
+func (s *FinalizeProjectStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Finalizing project.")
 	projectName := utils.FormatProjectName(state.Config.ProjectName)
 

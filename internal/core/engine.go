@@ -14,16 +14,15 @@ type Engine struct {
 func NewProjectEngine(config *config.Config, llm *llm.Client, pub StepPublisher, logger *zerolog.Logger) *Engine {
 	pipeline := NewPipeline(config, llm, pub, logger)
 
-	pipeline.AddStep(InitialStepType)
-	pipeline.AddStep(CreateTempDirType)
-	pipeline.AddStep(GenerateProjectDetailsType)
-	pipeline.AddStep(GenerateFileTreeType)
-	pipeline.AddStep(GenerateFileOperationsType)
-	pipeline.AddStep(ExecuteFileOperationsType)
-	pipeline.AddStep(DetermineFileOrderType)
-	pipeline.AddStep(GenerateFileContentsType)
-	pipeline.AddStep(CreateOptionalComponentsType)
-	pipeline.AddStep(FinalizeProjectType)
+	pipeline.AddStep(CreateTempDir)
+	pipeline.AddStep(GenerateProjectDetails)
+	pipeline.AddStep(GenerateFileTree)
+	pipeline.AddStep(GenerateFileOperations)
+	pipeline.AddStep(ExecuteFileOperations)
+	pipeline.AddStep(DetermineFileOrder)
+	pipeline.AddStep(GenerateFileContents)
+	pipeline.AddStep(CreateOptionalComponents)
+	pipeline.AddStep(FinalizeProject)
 
 	return &Engine{pipeline}
 }

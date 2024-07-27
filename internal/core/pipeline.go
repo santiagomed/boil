@@ -18,16 +18,15 @@ type Step interface {
 type StepType int
 
 const (
-	InitialStepType StepType = iota
-	CreateTempDirType
-	GenerateProjectDetailsType
-	GenerateFileTreeType
-	GenerateFileOperationsType
-	ExecuteFileOperationsType
-	DetermineFileOrderType
-	GenerateFileContentsType
-	CreateOptionalComponentsType
-	FinalizeProjectType
+	CreateTempDir StepType = iota
+	GenerateProjectDetails
+	GenerateFileTree
+	GenerateFileOperations
+	ExecuteFileOperations
+	DetermineFileOrder
+	GenerateFileContents
+	CreateOptionalComponents
+	FinalizeProject
 )
 
 type State struct {
