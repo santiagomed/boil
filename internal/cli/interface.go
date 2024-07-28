@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/list"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 )
@@ -27,9 +28,7 @@ const (
 	Questions
 )
 
-type finished struct {
-	err error
-}
+const ErrorOccurred core.StepType = -1
 
 type CliStepPublisher struct {
 	stepChan  chan core.StepType
@@ -91,7 +90,7 @@ func initialModel(name, prompt string) (model, error) {
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("202"))
 
 	projectDesc := utils.SanitizeInput(prompt)
 	config, err := config.LoadConfig("")
@@ -132,7 +131,52 @@ func (m model) Init() tea.Cmd {
 	return textinput.Blink
 }
 
-func (m model) handleInputEnter() (tea.Model, tea.Cmd) {
+func (m *model) handleKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch m.state {
+	case Input:
+		return m.handleInputState(msg)
+	case Questions:
+		return m.handleQuestionsState(msg)
+	default:
+		return m.handleQuit(msg)
+	}
+}
+
+func (m *model) handleInputState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		return m.handleKeyEnter()
+	case tea.KeyCtrlC, tea.KeyEsc:
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m *model) handleQuestionsState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.Type {
+	case tea.KeyEnter:
+		return m.handleQuestionAnswer(m.textInput.Value())
+	case tea.KeyCtrlC, tea.KeyEsc:
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+func (m *model) handleQuit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
+		m.logger.Debug().Msg("User exited the application")
+		if m.state == Processing {
+			m.engine.CleanupTempDir()
+		}
+		style := lipgloss.NewStyle().Faint(true)
+		message := "Interrupted. Exiting application..."
+		message = style.Render(message)
+		return m, tea.Sequence(tea.Printf("%s", message), tea.Quit)
+	}
+	return m, nil
+}
+
+func (m *model) handleKeyEnter() (tea.Model, tea.Cmd) {
 	if m.state != Input {
 		return m, nil
 	}
@@ -154,7 +198,7 @@ func (m model) handleInputEnter() (tea.Model, tea.Cmd) {
 	return m, tea.Printf("%s", message)
 }
 
-func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
+func (m *model) handleQuestionAnswer(answer string) (tea.Model, tea.Cmd) {
 	answer = strings.ToLower(answer)
 
 	if answer != "y" && answer != "n" && answer != "b" {
@@ -194,76 +238,57 @@ func (m *model) handleQuestionsEnter(answer string) (tea.Model, tea.Cmd) {
 
 func (m *model) startProjectGeneration() tea.Cmd {
 	go m.engine.Generate(m.projectDesc)
-	return m.listenForSteps
+	return m.listenForNextStep
 }
 
-func (m *model) listenForSteps() tea.Msg {
-	return listenForSteps(m.publisher.stepChan, m.publisher.errorChan)
-}
-
-func listenForSteps(stepChan <-chan core.StepType, errorChan <-chan error) tea.Msg {
+func (m *model) listenForNextStep() tea.Msg {
 	select {
-	case step := <-stepChan:
+	case step := <-m.publisher.stepChan:
 		return step
-	case err := <-errorChan:
-		return finished{err: err}
+	case err := <-m.publisher.errorChan:
+		m.logger.Error().Err(err).Msg("Error received during project generation")
+		return err
 	}
 }
 
-func (m *model) finalizeProject(err error) (tea.Model, tea.Cmd) {
-	if err != nil {
-		m.logger.Error().Err(err).Msg("Error generating project")
-		return m, tea.Sequence(tea.Printf("Error generating project: %s", err), tea.Quit)
+func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
+	m.logger.Debug().Msgf("Received step: %v", step)
+	m.completedSteps = append(m.completedSteps, step)
+	if step == core.FinalizeProject {
+		return m, m.finalizeProject()
 	}
+	return m, tea.Batch(m.spinner.Tick, m.listenForNextStep)
+}
 
+func (m *model) finalizeProject() tea.Cmd {
+	err := m.engine.CleanupTempDir()
+	if err != nil {
+		m.logger.Error().Err(err).Msg("Failed to clean up temporary directory")
+		return func() tea.Msg { return err }
+	}
 	placeholderStyle := lipgloss.NewStyle().Faint(true)
 	message := fmt.Sprintf("Project generated in directory: %s", m.config.ProjectName)
+	m.logger.Info().Msg(message)
 	message = placeholderStyle.Render(message)
-	m.engine.CleanupTempDir()
-	return m, tea.Sequence(tea.Printf("%s", message), tea.Quit)
+	return tea.Sequence(tea.Printf("%s", message), tea.Quit)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	// If we're in the processing state and we're on the initial step, start the project generation.
-	// This should only happen once.
 	if m.state == Initializing {
-		m.logger.Debug().Msg("hello darkness my old friend")
 		m.state = Processing
 		return m, tea.Batch(m.spinner.Tick, m.startProjectGeneration())
 	}
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch m.state {
-		case Input:
-			switch msg.Type {
-			case tea.KeyEnter:
-				return m.handleInputEnter()
-			case tea.KeyCtrlC, tea.KeyEsc:
-				m.logger.Debug().Msg("User exited the application")
-				return m, tea.Quit
-			}
-		case Questions:
-			switch msg.Type {
-			case tea.KeyEnter:
-				m.logger.Debug().Msg("User entered a response to a question")
-				return m.handleQuestionsEnter(m.textInput.Value())
-			case tea.KeyCtrlC, tea.KeyEsc:
-				m.logger.Debug().Msg("User exited the application")
-				return m, tea.Quit
-			}
+		m, cmd := m.handleKeyPress(msg)
+		if cmd != nil {
+			return m, cmd
 		}
 	case core.StepType:
-		m.completedSteps = append(m.completedSteps, msg)
-		m.logger.Debug().Msgf("Received step: %v", msg)
-		if m.completedSteps[len(m.completedSteps)-1] == core.FinalizeProject {
-			return m, func() tea.Msg { return finished{err: nil} }
-		}
-		return m, tea.Batch(m.spinner.Tick, m.listenForSteps)
-	case finished:
-		return m.finalizeProject(msg.err)
+		return m.handleStep(msg)
 	case error:
 		return m, tea.Sequence(tea.Printf("Error: %s", msg), tea.Quit)
 	default:
@@ -302,15 +327,28 @@ func (m model) View() string {
 			{"Creating optional components.", "Created optional components."},
 			{"Done.", "Done."},
 		}
-		var output strings.Builder
+
+		enumerator := func(l list.Items, i int) string {
+			var e string
+			if i < len(m.completedSteps) {
+				checkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+				check := checkStyle.Render("✓")
+				e = check
+			} else if i == len(m.completedSteps) {
+				e = m.spinner.View()
+			}
+			return e
+		}
+
+		l := list.New().Enumerator(enumerator)
 		for i, step := range steps {
 			if i < len(m.completedSteps) {
-				output.WriteString(fmt.Sprintf("[✔️] %s\n", step.past))
+				l.Item(step.past)
 			} else if i == len(m.completedSteps) {
-				output.WriteString(fmt.Sprintf(" %s %s\n", m.spinner.View(), step.present))
+				l.Item(step.present)
 			}
 		}
-		return output.String()
+		return fmt.Sprint(l)
 	case Questions:
 		questions := []string{
 			"Do you want to initialize a git repository?",
