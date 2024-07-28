@@ -28,8 +28,6 @@ const (
 	Questions
 )
 
-const ErrorOccurred core.StepType = -1
-
 type CliStepPublisher struct {
 	stepChan  chan core.StepType
 	errorChan chan error
@@ -268,7 +266,6 @@ func (m *model) finalizeProject() tea.Cmd {
 	}
 	placeholderStyle := lipgloss.NewStyle().Faint(true)
 	message := fmt.Sprintf("Project generated in directory: %s", m.config.ProjectName)
-	m.logger.Info().Msg(message)
 	message = placeholderStyle.Render(message)
 	return tea.Sequence(tea.Printf("%s", message), tea.Quit)
 }
