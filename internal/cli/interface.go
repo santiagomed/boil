@@ -26,6 +26,7 @@ const (
 	Initializing
 	Processing
 	Questions
+	Finished
 )
 
 type CliStepPublisher struct {
@@ -63,7 +64,6 @@ func (p *CliStepPublisher) Error(step core.StepType, err error) {
 type model struct {
 	textInput       textinput.Model
 	spinner         spinner.Model
-	prompt          string
 	projectDesc     string
 	state           state
 	config          *config.Config
@@ -75,7 +75,12 @@ type model struct {
 	logger          *zerolog.Logger
 }
 
-func initialModel(name, prompt string) (model, error) {
+type flags struct {
+	name   string
+	config string
+}
+
+func initialModel(prompt string, f flags) (model, error) {
 	ti := textinput.New()
 	ti.Placeholder = "Describe your project..."
 	ti.Focus()
@@ -83,42 +88,43 @@ func initialModel(name, prompt string) (model, error) {
 	ti.Width = 80
 
 	logger := utils.GetLogger()
-
 	logger.Debug().Msg("Initializing Boil CLI")
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("202"))
 
-	projectDesc := utils.SanitizeInput(prompt)
-	config, err := config.LoadConfig("")
-	if name != "" {
-		config.ProjectName = name
+	var cfg *config.Config
+	if f.config != "" {
+		var err error
+		cfg, err = config.LoadConfig(f.config)
+		if err != nil {
+			return model{}, err
+		}
+	} else {
+		cfg = config.DefaultConfig()
+	}
+	if f.name != "" {
+		cfg.ProjectName = f.name
 	}
 
+	projectDesc := utils.SanitizeInput(prompt)
 	llmCfg := llm.LlmConfig{
-		OpenAIAPIKey: config.OpenAIAPIKey,
-		ModelName:    config.ModelName,
-		ProjectName:  config.ProjectName,
+		OpenAIAPIKey: cfg.OpenAIAPIKey,
+		ModelName:    cfg.ModelName,
+		ProjectName:  cfg.ProjectName,
 	}
 	llmClient := llm.NewClient(&llmCfg)
-
 	publisher := NewCliStepPublisher(logger)
-
-	engine := core.NewProjectEngine(config, llmClient, publisher, logger)
-
-	if err != nil {
-		return model{}, fmt.Errorf("error loading configuration: %w", err)
-	}
+	engine := core.NewProjectEngine(cfg, llmClient, publisher, logger)
 
 	return model{
 		textInput:       ti,
 		spinner:         s,
-		prompt:          prompt,
 		state:           Input,
 		logger:          logger,
 		projectDesc:     projectDesc,
-		config:          config,
+		config:          cfg,
 		engine:          engine,
 		publisher:       publisher,
 		currentQuestion: 0,
@@ -253,31 +259,38 @@ func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
 	m.logger.Debug().Msgf("Received step: %v", step)
 	m.completedSteps = append(m.completedSteps, step)
 	if step == core.FinalizeProject {
-		return m, m.finalizeProject()
+		m.state = Finished
+		return m.finalizeProject()
 	}
 	return m, tea.Batch(m.spinner.Tick, m.listenForNextStep)
 }
 
-func (m *model) finalizeProject() tea.Cmd {
+func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
+	m.logger.Debug().Msg("Finalizing project")
 	err := m.engine.CleanupTempDir()
 	if err != nil {
 		m.logger.Error().Err(err).Msg("Failed to clean up temporary directory")
-		return func() tea.Msg { return err }
+		return m, func() tea.Msg { return err }
 	}
-	placeholderStyle := lipgloss.NewStyle().Faint(true)
-	message := fmt.Sprintf("Project generated in directory: %s", m.config.ProjectName)
-	message = placeholderStyle.Render(message)
-	return tea.Sequence(tea.Printf("%s", message), tea.Quit)
+	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	projectName := nameStyle.Render(m.config.ProjectName)
+	finalMsg := fmt.Sprintf("Project generated in directory: %s", projectName)
+	return m, tea.Printf("%s", finalMsg)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
-	if m.state == Initializing {
+	// Check for Finished or Initializing states
+	switch m.state {
+	case Finished:
+		return m, tea.Quit
+	case Initializing:
 		m.state = Processing
 		return m, tea.Batch(m.spinner.Tick, m.startProjectGeneration())
 	}
 
+	// Read the message and update the model
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		m, cmd := m.handleKeyPress(msg)
@@ -295,6 +308,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	// Update the text input
 	m.textInput, cmd = m.textInput.Update(msg)
 	return m, cmd
 }
@@ -382,19 +396,21 @@ var rootCmd = &cobra.Command{
 	Long:  `Boil is a powerful CLI tool that uses AI to generate custom project boilerplate files based on your description.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		prompt := strings.Join(args, " ")
-		name, err := cmd.Flags().GetString("name")
+		flags, err := parseFlags(cmd)
 		if err != nil {
-			fmt.Printf("Error: %v", err)
+			fmt.Printf("Error parsing flags: %v\n", err)
 			os.Exit(1)
 		}
-		model, err := initialModel(name, prompt)
+
+		model, err := initialModel(prompt, flags)
 		if err != nil {
-			fmt.Printf("Error: %v", err)
+			fmt.Printf("Error initializing model: %v\n", err)
 			os.Exit(1)
 		}
+
 		p := tea.NewProgram(model)
 		if _, err := p.Run(); err != nil {
-			fmt.Printf("Error: %v", err)
+			fmt.Printf("Error running program: %v\n", err)
 			os.Exit(1)
 		}
 	},
@@ -403,6 +419,23 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.Flags().StringP("name", "n", "", "The name of the project to generate. Also used as the project directory name")
 	rootCmd.Flags().StringP("config", "c", "", "Path to custom configuration file")
+}
+
+func parseFlags(cmd *cobra.Command) (flags, error) {
+	name, err := cmd.Flags().GetString("name")
+	if err != nil {
+		return flags{}, err
+	}
+
+	config, err := cmd.Flags().GetString("config")
+	if err != nil {
+		return flags{}, err
+	}
+
+	return flags{
+		name:   name,
+		config: config,
+	}, nil
 }
 
 func Execute() {
