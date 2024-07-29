@@ -29,7 +29,7 @@ brews:
     homepage: "https://github.com/santiagomed/boil"
     tap:
       owner: santiagomed
-      repo: homebrew-tap
+      name: homebrew-tap
     commit_author:
       name: Santiago Medina
     install: |
