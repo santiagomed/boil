@@ -114,7 +114,10 @@ func initialModel(prompt string, f flags) (model, error) {
 		ModelName:    cfg.ModelName,
 		ProjectName:  cfg.ProjectName,
 	}
-	llmClient := llm.NewClient(&llmCfg)
+	llmClient, err := llm.NewClient(&llmCfg)
+	if err != nil {
+		return model{}, err
+	}
 	publisher := NewCliStepPublisher(logger)
 	engine := core.NewProjectEngine(cfg, llmClient, publisher, logger)
 
@@ -377,6 +380,8 @@ func (m model) View() string {
 		}
 		output.WriteString("\n(Enter 'b' to go back, or 'esc' to quit)")
 		return output.String()
+	case Finished:
+		return "Project generated successfully!"
 	default:
 		m.logger.Error().Msg("An error occurred")
 		return "An error occurred."

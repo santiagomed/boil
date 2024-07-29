@@ -23,13 +23,14 @@ type Config struct {
 // DefaultConfig returns a Config with default values.
 func DefaultConfig() *Config {
 	return &Config{
-		ProjectName: "my-project",
-		TempDir:     os.TempDir(),
-		ModelName:   "gpt-4-turbo-preview",
-		GitRepo:     true,
-		GitIgnore:   true,
-		Readme:      true,
-		Dockerfile:  false,
+		ProjectName:  "my-project",
+		TempDir:      os.TempDir(),
+		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
+		ModelName:    "gpt-4-turbo-preview",
+		GitRepo:      true,
+		GitIgnore:    true,
+		Readme:       true,
+		Dockerfile:   false,
 	}
 }
 

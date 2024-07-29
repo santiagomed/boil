@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 
 	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"
@@ -26,9 +25,9 @@ type Client struct {
 }
 
 // NewClient creates a new LLM client
-func NewClient(cfg *LlmConfig) *Client {
+func NewClient(cfg *LlmConfig) (*Client, error) {
 	if cfg.OpenAIAPIKey == "" {
-		log.Fatal("OpenAI API key is not set")
+		return nil, errors.New("OpenAI API key is required")
 	}
 	openAIClient := openai.NewClient(cfg.OpenAIAPIKey)
 	tellmClient := tellm.NewClient("http://localhost:8080")
@@ -36,7 +35,7 @@ func NewClient(cfg *LlmConfig) *Client {
 		openAIClient: openAIClient,
 		config:       cfg,
 		tellmClient:  tellmClient,
-	}
+	}, nil
 }
 
 // GenerateProjectDetails generates detailed project information based on a description

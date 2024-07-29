@@ -49,11 +49,14 @@ func TestLlmSequential(t *testing.T) {
 		ModelName:    "gpt-4o-mini",
 		ProjectName:  "test-project",
 	}
-	llmClient := NewClient(&cfg)
+	llmClient, err := NewClient(&cfg)
+	if err != nil {
+		t.Fatalf("Error creating LLM client: %v", err)
+	}
 	t.Log("LLM client initialized")
 
 	outPath := "tmp/"
-	err := os.MkdirAll(outPath, 0755)
+	err = os.MkdirAll(outPath, 0755)
 	if err != nil {
 		t.Fatalf("Error creating temporary directory: %v", err)
 	}
