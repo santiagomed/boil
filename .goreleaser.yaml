@@ -24,6 +24,17 @@ builds:
       - windows
       - darwin
 
+brews:
+  - name: boil
+    homepage: "https://github.com/santiagomed/boil"
+    tap:
+      owner: santiagomed
+      repo: homebrew-tap
+    commit_author:
+      name: Santiago Medina
+    install: |
+      bin.install "boil"
+
 archives:
   - format: tar.gz
     # this name template makes the OS and Arch compatible with the results of `uname`.
