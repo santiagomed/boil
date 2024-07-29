@@ -2,11 +2,10 @@
 
 # Project Settings
 project_name: my-awesome-project
-output_dir: ./projects
 
 # OpenAI Settings
 openai_api_key: your-api-key-here
-model_name: gpt-4-turbo-preview
+model_name: gpt-4o-mini
 
 # Temporary Directory
 # Uncomment and modify if you want to specify a custom temp directory
@@ -17,12 +16,3 @@ git_repo: true
 git_ignore: true
 readme: true
 dockerfile: false
-
-# License Settings
-license: false
-license_type: MIT
-# Advanced Settings
-# Uncomment and modify these if you need to override the defaults
-# custom_templates_dir: /path/to/custom/templates
-# max_tokens: 2000
-# temperature: 0.7
