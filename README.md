@@ -2,6 +2,8 @@
 
 Boil is an AI-powered CLI tool that generates custom project boilerplate code based on your project description.
 
+![boil-demo](https://github.com/user-attachments/assets/42482a99-0281-4659-a22a-66771c6954a1)
+
 ## Features
 
 - **AI-Driven Code Generation**: Describe your project, and Boil creates tailored boilerplate code.
