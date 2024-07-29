@@ -26,7 +26,7 @@ func DefaultConfig() *Config {
 		ProjectName:  "my-project",
 		TempDir:      os.TempDir(),
 		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
-		ModelName:    "gpt-4-turbo-preview",
+		ModelName:    "gpt-4o-mini",
 		GitRepo:      true,
 		GitIgnore:    true,
 		Readme:       true,
