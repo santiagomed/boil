@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"boil/internal/config"
+	"github.com/santiagomed/boil/pkg/config"
 )
 
 // Manager handles the creation and management of temporary directories

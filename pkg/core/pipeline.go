@@ -1,12 +1,13 @@
 package core
 
 import (
-	"boil/internal/config"
-	"boil/internal/llm"
-	"boil/internal/tempdir"
-	"boil/internal/utils"
 	"fmt"
 	"time"
+
+	"github.com/santiagomed/boil/internal/llm"
+	"github.com/santiagomed/boil/internal/tempdir"
+	"github.com/santiagomed/boil/internal/utils"
+	"github.com/santiagomed/boil/pkg/config"
 
 	"github.com/rs/zerolog"
 )

@@ -1,11 +1,12 @@
 package core
 
 import (
-	"boil/internal/tempdir"
-	"boil/internal/utils"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/santiagomed/boil/internal/tempdir"
+	"github.com/santiagomed/boil/internal/utils"
 )
 
 var stepMap = map[StepType]Step{

@@ -1,9 +1,8 @@
 package main
 
 import (
-	"boil/internal/cli"
-	"boil/internal/utils"
-	// tlp "github.com/traceloop/go-openllmetry/traceloop-sdk"
+	"github.com/santiagomed/boil/internal/cli"
+	"github.com/santiagomed/boil/internal/utils"
 )
 
 func main() {

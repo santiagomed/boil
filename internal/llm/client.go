@@ -1,11 +1,12 @@
 package llm
 
 import (
-	"boil/internal/utils"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"github.com/santiagomed/boil/internal/utils"
 
 	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"
