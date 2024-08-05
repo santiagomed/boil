@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/santiagomed/boil/internal/tempdir"
-	"github.com/santiagomed/boil/internal/utils"
+	"github.com/santiagomed/boil/pkg/tempdir"
+	"github.com/santiagomed/boil/pkg/utils"
 )
 
 var stepMap = map[StepType]Step{

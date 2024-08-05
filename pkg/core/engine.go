@@ -1,8 +1,8 @@
 package core
 
 import (
-	"github.com/santiagomed/boil/internal/llm"
 	"github.com/santiagomed/boil/pkg/config"
+	"github.com/santiagomed/boil/pkg/llm"
 
 	"github.com/rs/zerolog"
 )

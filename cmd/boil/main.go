@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/santiagomed/boil/internal/cli"
-	"github.com/santiagomed/boil/internal/utils"
+	"github.com/santiagomed/boil/cli"
+	"github.com/santiagomed/boil/pkg/utils"
 )
 
 func main() {

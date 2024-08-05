@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/santiagomed/boil/internal/llm"
-	"github.com/santiagomed/boil/internal/tempdir"
-	"github.com/santiagomed/boil/internal/utils"
 	"github.com/santiagomed/boil/pkg/config"
+	"github.com/santiagomed/boil/pkg/llm"
+	"github.com/santiagomed/boil/pkg/tempdir"
+	"github.com/santiagomed/boil/pkg/utils"
 
 	"github.com/rs/zerolog"
 )

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/santiagomed/boil/internal/utils"
+	"github.com/santiagomed/boil/pkg/utils"
 
 	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"

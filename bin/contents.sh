@@ -20,31 +20,22 @@ process_file() {
     echo -e "\n" >> "$OUT_FILE"
 }
 
-# Process main.go
-process_file "$(pwd)/cmd/boil/main.go"
+# Check if directories are provided
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <directory1> [directory2] ..."
+    exit 1
+fi
 
-# Process files in internal/cli
-process_file "$(pwd)/internal/cli/interface.go"
-
-# Process files in internal/config
-process_file "$(pwd)/internal/config/config.go"
-
-# Process files in internal/core
-process_file "$(pwd)/internal/core/engine.go"
-process_file "$(pwd)/internal/core/pipeline.go"
-process_file "$(pwd)/internal/core/steps.go"
-
-# Process files in internal/llm
-process_file "$(pwd)/internal/llm/client.go"
-process_file "$(pwd)/internal/llm/llm_test.go"
-process_file "$(pwd)/internal/llm/prompts.go"
-
-# Process file in internal/tempdir
-process_file "$(pwd)/internal/tempdir/manager.go"
-
-# Process files in internal/utils
-process_file "$(pwd)/internal/utils/fileops.go"
-process_file "$(pwd)/internal/utils/logger.go"
-process_file "$(pwd)/internal/utils/sanitize.go"
+# Process all files in the specified directories
+for dir in "$@"; do
+    if [ ! -d "$dir" ]; then
+        echo "Warning: $dir is not a directory. Skipping."
+        continue
+    fi
+    
+    find "$dir" -type f | while read -r file; do
+        process_file "$file"
+    done
+done
 
 echo "File contents have been copied to $OUT_FILE"

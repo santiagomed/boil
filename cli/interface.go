@@ -5,10 +5,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/santiagomed/boil/internal/llm"
-	"github.com/santiagomed/boil/internal/utils"
 	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/core"
+	"github.com/santiagomed/boil/pkg/llm"
+	"github.com/santiagomed/boil/pkg/utils"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
