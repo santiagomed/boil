@@ -19,8 +19,7 @@ type Step interface {
 type StepType int
 
 const (
-	CreateTempDir StepType = iota
-	GenerateProjectDetails
+	GenerateProjectDetails StepType = iota
 	GenerateFileTree
 	GenerateFileOperations
 	ExecuteFileOperations

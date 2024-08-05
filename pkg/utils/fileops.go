@@ -1,13 +1,20 @@
 package utils
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
+
+	"github.com/spf13/afero"
 )
+
+var AppFs afero.Fs
+
+func init() {
+	AppFs = afero.NewMemMapFs()
+}
 
 // FileOperation represents a single file operation
 type FileOperation struct {
@@ -16,9 +23,9 @@ type FileOperation struct {
 }
 
 // ExecuteFileOperations performs a series of file operations
-func ExecuteFileOperations(baseDir string, operations []FileOperation) error {
+func ExecuteFileOperations(operations []FileOperation) error {
 	for _, op := range operations {
-		if err := ExecuteFileOperation(baseDir, op); err != nil {
+		if err := ExecuteFileOperation(op); err != nil {
 			return fmt.Errorf("error executing operation %s on %s: %w", op.Operation, op.Path, err)
 		}
 	}
@@ -26,14 +33,12 @@ func ExecuteFileOperations(baseDir string, operations []FileOperation) error {
 }
 
 // ExecuteFileOperation performs a single file operation
-func ExecuteFileOperation(baseDir string, op FileOperation) error {
-	fullPath := filepath.Join(baseDir, op.Path)
-
+func ExecuteFileOperation(op FileOperation) error {
 	switch op.Operation {
 	case "CREATE_DIR":
-		return os.MkdirAll(fullPath, 0755)
+		return AppFs.MkdirAll(op.Path, 0755)
 	case "CREATE_FILE":
-		return CreateFile(fullPath)
+		return CreateFile(op.Path)
 	default:
 		return fmt.Errorf("unknown operation: %s", op.Operation)
 	}
@@ -42,11 +47,11 @@ func ExecuteFileOperation(baseDir string, op FileOperation) error {
 // Creates a new file
 func CreateFile(path string) error {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := AppFs.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("error creating directory %s: %w", dir, err)
 	}
 
-	f, err := os.Create(path)
+	f, err := AppFs.Create(path)
 	if err != nil {
 		return fmt.Errorf("error creating file %s: %w", path, err)
 	}
@@ -55,31 +60,20 @@ func CreateFile(path string) error {
 	return nil
 }
 
-// Creates a new file with the given content or overwrites an existing file with the content
+// WriteFile creates a new file with the given content or overwrites an existing file with the content
 func WriteFile(path string, content string) error {
-	f, err := os.Create(path)
-	if err != nil {
-		return fmt.Errorf("error creating file %s: %w", path, err)
-	}
-	defer f.Close()
-
-	_, err = f.WriteString(content)
-	if err != nil {
-		return fmt.Errorf("error writing to file %s: %w", path, err)
-	}
-
-	return nil
+	return afero.WriteFile(AppFs, path, []byte(content), 0644)
 }
 
 // CopyFile copies a file from src to dst
 func CopyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
+	sourceFile, err := AppFs.Open(src)
 	if err != nil {
 		return fmt.Errorf("error opening source file: %w", err)
 	}
 	defer sourceFile.Close()
 
-	dstFile, err := os.Create(dst)
+	dstFile, err := AppFs.Create(dst)
 	if err != nil {
 		return fmt.Errorf("error creating destination file: %w", err)
 	}
@@ -93,12 +87,12 @@ func CopyFile(src, dst string) error {
 	return nil
 }
 
-// CopyDir recursively copies a directory tree, attempting to preserve permissions
+// CopyDir recursively copies a directory tree
 func CopyDir(src string, dst string) error {
 	src = filepath.Clean(src)
 	dst = filepath.Clean(dst)
 
-	si, err := os.Stat(src)
+	si, err := AppFs.Stat(src)
 	if err != nil {
 		return err
 	}
@@ -106,17 +100,12 @@ func CopyDir(src string, dst string) error {
 		return fmt.Errorf("source is not a directory")
 	}
 
-	_, err = os.Stat(dst)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	err = os.MkdirAll(dst, si.Mode())
+	err = AppFs.MkdirAll(dst, si.Mode())
 	if err != nil {
 		return err
 	}
 
-	entries, err := os.ReadDir(src)
+	entries, err := afero.ReadDir(AppFs, src)
 	if err != nil {
 		return err
 	}
@@ -131,11 +120,6 @@ func CopyDir(src string, dst string) error {
 				return err
 			}
 		} else {
-			// Skip symlinks
-			if entry.Type()&os.ModeSymlink != 0 {
-				continue
-			}
-
 			err = CopyFile(srcPath, dstPath)
 			if err != nil {
 				return err
@@ -148,24 +132,7 @@ func CopyDir(src string, dst string) error {
 
 // EnsureDir ensures that the specified directory exists
 func EnsureDir(dir string) error {
-	return os.MkdirAll(dir, os.ModePerm)
-}
-
-// CreateCmd creates an *exec.Cmd with the given directory and command
-func CreateCmd(dir string, name string, args ...string) *exec.Cmd {
-	cmd := exec.Command(name, args...)
-	cmd.Dir = dir
-	return cmd
-}
-
-// ExecuteCmd executes a command and returns its output
-func ExecuteCmd(dir string, name string, args ...string) (string, error) {
-	cmd := CreateCmd(dir, name, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("error executing command '%s %s': %w\nOutput: %s", name, strings.Join(args, " "), err, output)
-	}
-	return string(output), nil
+	return AppFs.MkdirAll(dir, 0755)
 }
 
 // MoveDir moves the contents of a directory to another location
@@ -173,7 +140,7 @@ func MoveDir(src, dst string) error {
 	if err := CopyDir(src, dst); err != nil {
 		return fmt.Errorf("error copying directory contents: %w", err)
 	}
-	if err := os.RemoveAll(src); err != nil {
+	if err := AppFs.RemoveAll(src); err != nil {
 		return fmt.Errorf("error removing source directory: %w", err)
 	}
 	return nil
@@ -181,13 +148,13 @@ func MoveDir(src, dst string) error {
 
 // FileExists checks if a file exists
 func FileExists(path string) bool {
-	_, err := os.Stat(path)
+	_, err := AppFs.Stat(path)
 	return !os.IsNotExist(err)
 }
 
 // IsDir checks if a path is a directory
 func IsDir(path string) bool {
-	info, err := os.Stat(path)
+	info, err := AppFs.Stat(path)
 	if err != nil {
 		return false
 	}
@@ -195,10 +162,54 @@ func IsDir(path string) bool {
 }
 
 // InitializeGitRepo initializes a git repository in the given directory
+// Note: This function will need to be handled differently as we can't execute git commands on the in-memory file system
 func InitializeGitRepo(dir string) error {
-	_, err := ExecuteCmd(dir, "git", "init")
+	// For now, we'll just create a .git directory to simulate git initialization
+	return AppFs.MkdirAll(filepath.Join(dir, ".git"), 0755)
+}
+
+// WriteToZip writes the in-memory file system to a zip file
+func WriteToZip(zipPath string) error {
+	realFs := afero.NewOsFs()
+	zipFile, err := realFs.Create(zipPath)
 	if err != nil {
-		return fmt.Errorf("error initializing git repository: %w", err)
+		return fmt.Errorf("error creating zip file: %w", err)
 	}
+	defer zipFile.Close()
+
+	err = afero.Walk(AppFs, "/", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		file, err := AppFs.Open(path)
+		if err != nil {
+			return fmt.Errorf("error opening file %s: %w", path, err)
+		}
+		defer file.Close()
+
+		// Create zip entry
+		zipWriter := zip.NewWriter(zipFile)
+		defer zipWriter.Close()
+		writer, err := zipWriter.Create(path)
+		if err != nil {
+			return fmt.Errorf("error creating zip entry for %s: %w", path, err)
+		}
+
+		// Copy file contents to zip
+		_, err = io.Copy(writer, file)
+		if err != nil {
+			return fmt.Errorf("error writing file %s to zip: %w", path, err)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("error walking file system: %w", err)
+	}
+
 	return nil
 }

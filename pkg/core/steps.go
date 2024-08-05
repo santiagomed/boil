@@ -5,12 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/santiagomed/boil/pkg/tempdir"
 	"github.com/santiagomed/boil/pkg/utils"
 )
 
 var stepMap = map[StepType]Step{
-	CreateTempDir:            &CreateTempDirStep{},
 	GenerateProjectDetails:   &GenerateProjectDetailsStep{},
 	GenerateFileTree:         &GenerateFileTreeStep{},
 	GenerateFileOperations:   &GenerateFileOperationsStep{},
@@ -29,21 +27,6 @@ type InitialStep struct{}
 
 func (s *InitialStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Initializing pipeline execution.")
-	return nil
-}
-
-type CreateTempDirStep struct{}
-
-func (s *CreateTempDirStep) Execute(state *State) error {
-	state.Logger.Debug().Msg("Creating temporary directory.")
-	state.TempDir = tempdir.NewManager(state.Config)
-	path, err := state.TempDir.CreateTempDir("boil")
-	if err != nil {
-		state.Logger.Error().Err(err).Msg("Failed to create temporary directory")
-		return fmt.Errorf("failed to create temporary directory: %w", err)
-	}
-	state.TempDirPath = path
-	state.Logger.Debug().Msg("Temporary directory created successfully")
 	return nil
 }
 
@@ -93,7 +76,7 @@ type ExecuteFileOperationsStep struct{}
 
 func (s *ExecuteFileOperationsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Executing file operations.")
-	err := utils.ExecuteFileOperations(state.TempDirPath, state.FileOperations)
+	err := utils.ExecuteFileOperations(state.FileOperations)
 	if err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to execute file operations")
 		return fmt.Errorf("failed to execute file operations: %w", err)
@@ -121,8 +104,7 @@ type GenerateFileContentsStep struct{}
 func (s *GenerateFileContentsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file contents.")
 	for _, file := range state.FileOrder {
-		path := filepath.Join(state.TempDirPath, file)
-		if utils.IsDir(path) || !utils.FileExists(path) {
+		if utils.IsDir(file) {
 			continue
 		}
 		state.Logger.Debug().Msgf("Generating content for file %s.", file)
@@ -131,7 +113,7 @@ func (s *GenerateFileContentsStep) Execute(state *State) error {
 			state.Logger.Error().Err(err).Msgf("Failed to generate content for file %s", file)
 			return fmt.Errorf("failed to generate content for file %s: %w", file, err)
 		}
-		err = utils.WriteFile(path, content)
+		err = utils.WriteFile(file, content)
 		if err != nil {
 			state.Logger.Error().Err(err).Msgf("Failed to create file %s", file)
 			return fmt.Errorf("failed to create file %s: %w", file, err)
@@ -215,11 +197,11 @@ func (s *FinalizeProjectStep) Execute(state *State) error {
 		return fmt.Errorf("failed to get current working directory: %w", err)
 	}
 
-	finalPath := filepath.Join(outDir, projectName)
-	state.Logger.Printf("Moving project from %s to %s\n", state.TempDirPath, finalPath)
-	if err := utils.MoveDir(state.TempDirPath, finalPath); err != nil {
-		state.Logger.Error().Err(err).Msg("Failed to move project to final directory")
-		return fmt.Errorf("failed to move project to final directory: %w", err)
+	finalPath := filepath.Join(outDir, projectName+".zip")
+	state.Logger.Printf("Writing project to zip file: %s\n", finalPath)
+	if err := utils.WriteToZip(finalPath); err != nil {
+		state.Logger.Error().Err(err).Msg("Failed to write project to zip file")
+		return fmt.Errorf("failed to write project to zip file: %w", err)
 	}
 
 	state.Logger.Debug().Msg("Project finalized successfully")
