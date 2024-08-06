@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/santiagomed/boil/pkg/utils"
@@ -76,7 +75,7 @@ type ExecuteFileOperationsStep struct{}
 
 func (s *ExecuteFileOperationsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Executing file operations.")
-	err := utils.ExecuteFileOperations(state.FileOperations)
+	err := state.FileSystem.ExecuteFileOperations(state.FileOperations)
 	if err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to execute file operations")
 		return fmt.Errorf("failed to execute file operations: %w", err)
@@ -104,7 +103,7 @@ type GenerateFileContentsStep struct{}
 func (s *GenerateFileContentsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file contents.")
 	for _, file := range state.FileOrder {
-		if utils.IsDir(file) {
+		if state.FileSystem.IsDir(file) {
 			continue
 		}
 		state.Logger.Debug().Msgf("Generating content for file %s.", file)
@@ -113,7 +112,7 @@ func (s *GenerateFileContentsStep) Execute(state *State) error {
 			state.Logger.Error().Err(err).Msgf("Failed to generate content for file %s", file)
 			return fmt.Errorf("failed to generate content for file %s: %w", file, err)
 		}
-		err = utils.WriteFile(file, content)
+		err = state.FileSystem.WriteFile(file, content)
 		if err != nil {
 			state.Logger.Error().Err(err).Msgf("Failed to create file %s", file)
 			return fmt.Errorf("failed to create file %s: %w", file, err)
@@ -132,7 +131,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Config.GitRepo {
 		state.Logger.Debug().Msg("Initializing Git repository.")
-		if err := utils.InitializeGitRepo(state.TempDirPath); err != nil {
+		if err := state.FileSystem.InitializeGitRepo(); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to initialize Git repository")
 			return fmt.Errorf("failed to initialize git repository: %w", err)
 		}
@@ -146,7 +145,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 			state.Logger.Error().Err(err).Msg("Failed to create .gitignore file")
 			return fmt.Errorf("failed to create .gitignore file: %w", err)
 		}
-		if err := utils.WriteFile(filepath.Join(state.TempDirPath, ".gitignore"), gitignore); err != nil {
+		if err := state.FileSystem.WriteFile(".gitignore", gitignore); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create .gitignore file")
 			return fmt.Errorf("failed to create .gitignore file: %w", err)
 		}
@@ -160,7 +159,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 			state.Logger.Error().Err(err).Msg("Failed to generate README")
 			return fmt.Errorf("failed to generate README: %w", err)
 		}
-		if err := utils.WriteFile(filepath.Join(state.TempDirPath, "README.md"), readme); err != nil {
+		if err := state.FileSystem.WriteFile("README.md", readme); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create README file")
 			return fmt.Errorf("failed to create README file: %w", err)
 		}
@@ -174,7 +173,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 			state.Logger.Error().Err(err).Msg("Failed to generate Dockerfile")
 			return fmt.Errorf("failed to generate Dockerfile: %w", err)
 		}
-		if err := utils.WriteFile(filepath.Join(state.TempDirPath, "Dockerfile"), dockerfile); err != nil {
+		if err := state.FileSystem.WriteFile("Dockerfile", dockerfile); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create Dockerfile")
 			return fmt.Errorf("failed to create Dockerfile: %w", err)
 		}
@@ -191,15 +190,9 @@ func (s *FinalizeProjectStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Finalizing project.")
 	projectName := utils.FormatProjectName(state.Config.ProjectName)
 
-	outDir, err := os.Getwd()
-	if err != nil {
-		state.Logger.Error().Err(err).Msg("Failed to get current working directory")
-		return fmt.Errorf("failed to get current working directory: %w", err)
-	}
-
-	finalPath := filepath.Join(outDir, projectName+".zip")
-	state.Logger.Printf("Writing project to zip file: %s\n", finalPath)
-	if err := utils.WriteToZip(finalPath); err != nil {
+	zipPath := filepath.Join(".", projectName+".zip")
+	state.Logger.Printf("Writing project to zip file: %s\n", zipPath)
+	if err := state.FileSystem.WriteToZip(zipPath); err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to write project to zip file")
 		return fmt.Errorf("failed to write project to zip file: %w", err)
 	}

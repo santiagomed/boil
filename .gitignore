@@ -10,3 +10,7 @@
 .env
 tmp/
 dist/
+
+# Misc
+.DS_Store
+.vscode

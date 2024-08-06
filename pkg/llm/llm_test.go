@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/santiagomed/boil/pkg/utils"
+	"github.com/santiagomed/boil/pkg/fs"
 )
 
 type Cache struct {
@@ -117,7 +117,7 @@ func TestLlmSequential(t *testing.T) {
 	// Step 4: Generate File Operations
 	t.Log("Step 4: Generating File Operations")
 	fileOperationsStr, err := cache.Get("file_operations.json")
-	var fileOperations []utils.FileOperation
+	var fileOperations []fs.FileOperation
 	if err != nil {
 		fileOperations, err = llmClient.GenerateFileOperations(projectDetails, fileTree)
 		if err != nil {

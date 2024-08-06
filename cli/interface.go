@@ -172,9 +172,6 @@ func (m *model) handleQuestionsState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleQuit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
 		m.logger.Debug().Msg("User exited the application")
-		if m.state == Processing {
-			m.engine.CleanupTempDir()
-		}
 		style := lipgloss.NewStyle().Faint(true)
 		message := "Interrupted. Exiting application..."
 		message = style.Render(message)
@@ -270,11 +267,6 @@ func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
 
 func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
 	m.logger.Debug().Msg("Finalizing project")
-	err := m.engine.CleanupTempDir()
-	if err != nil {
-		m.logger.Error().Err(err).Msg("Failed to clean up temporary directory")
-		return m, func() tea.Msg { return err }
-	}
 	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 	projectName := nameStyle.Render(m.config.ProjectName)
 	finalMsg := fmt.Sprintf("Project generated in directory: %s", projectName)
@@ -331,7 +323,6 @@ func (m model) View() string {
 			present string
 			past    string
 		}{
-			{"Creating temporary directory.", "Created temporary directory."},
 			{"Generating project details.", "Generated project details."},
 			{"Generating file tree.", "Generated file tree."},
 			{"Generating file operations.", "Generated file operations."},

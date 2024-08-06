@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/santiagomed/boil/pkg/config"
+	"github.com/santiagomed/boil/pkg/fs"
 	"github.com/santiagomed/boil/pkg/llm"
 
 	"github.com/rs/zerolog"
@@ -13,6 +14,7 @@ type Engine struct {
 
 func NewProjectEngine(config *config.Config, llm *llm.Client, pub StepPublisher, logger *zerolog.Logger) *Engine {
 	pipeline := NewPipeline(config, llm, pub, logger)
+	pipeline.state.FileSystem = fs.NewMemoryFileSystem()
 
 	pipeline.AddStep(GenerateProjectDetails)
 	pipeline.AddStep(GenerateFileTree)
@@ -28,8 +30,4 @@ func NewProjectEngine(config *config.Config, llm *llm.Client, pub StepPublisher,
 
 func (e *Engine) Generate(projectDesc string) {
 	e.pipeline.Execute(projectDesc)
-}
-
-func (e *Engine) CleanupTempDir() error {
-	return e.pipeline.state.TempDir.Cleanup()
 }

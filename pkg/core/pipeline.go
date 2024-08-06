@@ -5,9 +5,8 @@ import (
 	"time"
 
 	"github.com/santiagomed/boil/pkg/config"
+	"github.com/santiagomed/boil/pkg/fs"
 	"github.com/santiagomed/boil/pkg/llm"
-	"github.com/santiagomed/boil/pkg/tempdir"
-	"github.com/santiagomed/boil/pkg/utils"
 
 	"github.com/rs/zerolog"
 )
@@ -31,16 +30,15 @@ const (
 
 type State struct {
 	ProjectDesc    string
-	TempDir        *tempdir.Manager
-	TempDirPath    string
 	ProjectDetails string
 	FileTree       string
-	FileOperations []utils.FileOperation
+	FileOperations []fs.FileOperation
 	FileOrder      []string
 	PreviousFiles  map[string]string
 	Config         *config.Config
 	Llm            *llm.Client
 	Logger         *zerolog.Logger
+	FileSystem     *fs.FileSystem
 }
 
 type Pipeline struct {
