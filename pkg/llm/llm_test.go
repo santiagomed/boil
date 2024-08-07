@@ -44,6 +44,10 @@ func (c *Cache) Set(filename string, content string) error {
 func TestLlmSequential(t *testing.T) {
 	t.Log("Starting TestLlmSequential")
 
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		t.Skip("OPENAI_API_KEY is not set, skipping test")
+	}
+
 	cfg := LlmConfig{
 		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
 		ModelName:    "gpt-4o-mini",
