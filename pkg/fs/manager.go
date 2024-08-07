@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/santiagomed/boil/pkg/utils"
 	"github.com/spf13/afero"
 )
 
@@ -77,13 +76,10 @@ func (fs *FileSystem) CreateFile(path string) error {
 
 // WriteFile creates a new file with the given content or overwrites an existing file with the content
 func (fs *FileSystem) WriteFile(path string, content string) error {
-	log := utils.GetLogger()
 	err := afero.WriteFile(fs.Fs, path, []byte(content), 0644)
 	if err != nil {
-		log.Error().Msgf("Error writing file %s: %v", path, err)
 		return fmt.Errorf("error writing file %s: %w", path, err)
 	}
-	log.Debug().Msgf("Successfully wrote file: %s", path)
 	return nil
 }
 
@@ -105,14 +101,6 @@ func (fs *FileSystem) InitializeGitRepo() error {
 
 // WriteToZip writes the in-memory file system to a zip file
 func (fs *FileSystem) WriteToZip(zipPath string) error {
-	log := utils.GetLogger()
-	log.Debug().Msgf("Starting to write zip file: %s", zipPath)
-
-	// List all files before zipping
-	if _, err := fs.ListFiles(); err != nil {
-		log.Error().Msgf("Error listing files before zip creation: %v", err)
-	}
-
 	realFs := afero.NewOsFs()
 	zipFile, err := realFs.Create(zipPath)
 	if err != nil {
@@ -126,7 +114,6 @@ func (fs *FileSystem) WriteToZip(zipPath string) error {
 	fileCount := 0
 	err = afero.Walk(fs.Fs, ".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			log.Error().Msgf("Error walking path %s: %v", path, err)
 			return err
 		}
 
@@ -139,32 +126,26 @@ func (fs *FileSystem) WriteToZip(zipPath string) error {
 		zipPath := path
 
 		if info.IsDir() {
-			log.Debug().Msgf("Adding directory to zip: %s", zipPath)
 			_, err := zipWriter.Create(zipPath + "/")
 			if err != nil {
-				log.Error().Msgf("Error creating zip entry for directory %s: %v", zipPath, err)
 				return fmt.Errorf("error creating zip entry for directory %s: %w", zipPath, err)
 			}
 			return nil
 		}
 
-		log.Debug().Msgf("Adding file to zip: %s", zipPath)
 		writer, err := zipWriter.Create(zipPath)
 		if err != nil {
-			log.Error().Msgf("Error creating zip entry for file %s: %v", zipPath, err)
 			return fmt.Errorf("error creating zip entry for file %s: %w", zipPath, err)
 		}
 
 		file, err := fs.Fs.Open(path)
 		if err != nil {
-			log.Error().Msgf("Error opening file %s: %v", path, err)
 			return fmt.Errorf("error opening file %s: %w", path, err)
 		}
 		defer file.Close()
 
 		_, err = io.Copy(writer, file)
 		if err != nil {
-			log.Error().Msgf("Error writing file %s to zip: %v", path, err)
 			return fmt.Errorf("error writing file %s to zip: %w", path, err)
 		}
 
@@ -180,27 +161,21 @@ func (fs *FileSystem) WriteToZip(zipPath string) error {
 		return fmt.Errorf("no files to zip")
 	}
 
-	log.Debug().Msgf("Successfully added %d files to zip", fileCount)
-
 	err = zipWriter.Close()
 	if err != nil {
-		log.Error().Msgf("Error closing zip writer: %v", err)
 		return fmt.Errorf("error closing zip writer: %w", err)
 	}
 
-	log.Debug().Msgf("Successfully created zip file: %s", zipPath)
 	return nil
 }
 
 // ListFiles lists all files in the filesystem and returns a map representing the directory structure
 func (fs *FileSystem) ListFiles() (map[string]interface{}, error) {
-	log := utils.GetLogger()
 	structure := make(map[string]interface{})
 	fileCount := 0
 
 	err := afero.Walk(fs.Fs, ".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			log.Error().Msgf("Error walking path %s: %v", path, err)
 			return err
 		}
 		// Skip root directory
@@ -214,11 +189,9 @@ func (fs *FileSystem) ListFiles() (map[string]interface{}, error) {
 			if i == len(parts)-1 {
 				if info.IsDir() {
 					current[part] = make(map[string]interface{})
-					log.Debug().Msgf("Directory: %s", path)
 				} else {
 					current[part] = nil // Use nil to represent files
 					fileCount++
-					log.Debug().Msgf("File: %s", path)
 				}
 			} else {
 				if _, exists := current[part]; !exists {
@@ -230,6 +203,5 @@ func (fs *FileSystem) ListFiles() (map[string]interface{}, error) {
 		return nil
 	})
 
-	log.Debug().Msgf("Total files found: %d", fileCount)
 	return structure, err
 }

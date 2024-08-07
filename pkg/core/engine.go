@@ -6,8 +6,7 @@ import (
 	"time"
 
 	"github.com/santiagomed/boil/pkg/config"
-
-	"github.com/rs/zerolog"
+	"github.com/santiagomed/boil/pkg/logger"
 )
 
 type Request struct {
@@ -19,18 +18,21 @@ type Request struct {
 type Engine struct {
 	config       *config.Config
 	pub          StepPublisher
-	logger       *zerolog.Logger
+	logger       logger.Logger
 	requests     chan Request
 	workers      int
 	workerWG     sync.WaitGroup
 	shutdownChan chan struct{}
 }
 
-func NewProjectEngine(config *config.Config, pub StepPublisher, logger *zerolog.Logger, workers int) (*Engine, error) {
+func NewProjectEngine(config *config.Config, pub StepPublisher, l logger.Logger, workers int) (*Engine, error) {
+	if l == nil {
+		l = logger.NewNullLogger()
+	}
 	return &Engine{
 		config:       config,
 		pub:          pub,
-		logger:       logger,
+		logger:       l,
 		requests:     make(chan Request, 1000), // Buffered channel
 		workers:      workers,
 		shutdownChan: make(chan struct{}),
@@ -87,8 +89,8 @@ func (e *Engine) Shutdown(timeout time.Duration) {
 
 	select {
 	case <-done:
-		e.logger.Info().Msg("All workers shut down gracefully")
+		e.logger.Info("All workers shut down gracefully")
 	case <-time.After(timeout):
-		e.logger.Warn().Msg("Shutdown timed out, some workers may still be running")
+		e.logger.Warn("Shutdown timed out, some workers may still be running")
 	}
 }

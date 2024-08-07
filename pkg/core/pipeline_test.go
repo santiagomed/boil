@@ -1,14 +1,13 @@
 package core
 
 import (
-	"io"
 	"os"
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/fs"
+	"github.com/santiagomed/boil/pkg/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -147,14 +146,13 @@ func TestPipeline_Execute(t *testing.T) {
 	// Use real FileSystem and StepPublisher
 	memFS := fs.NewMemoryFileSystem()
 	realPublisher := NewPublisher()
-	log := zerolog.New(io.Discard)
 
 	pipeline := &Pipeline{
 		stepManager: NewStepManager(mockLLM, memFS),
 		state: &State{
 			Config:        cfg,
 			PreviousFiles: make(map[string]string),
-			Logger:        &log,
+			Logger:        logger.NewNullLogger(),
 		},
 		publisher: realPublisher,
 	}

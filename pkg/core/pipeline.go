@@ -7,8 +7,7 @@ import (
 	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/fs"
 	"github.com/santiagomed/boil/pkg/llm"
-
-	"github.com/rs/zerolog"
+	"github.com/santiagomed/boil/pkg/logger"
 )
 
 type Step interface {
@@ -36,7 +35,7 @@ type State struct {
 	FileOrder      []string
 	PreviousFiles  map[string]string
 	Config         *config.Config
-	Logger         *zerolog.Logger
+	Logger         logger.Logger
 }
 
 type Pipeline struct {
@@ -45,7 +44,7 @@ type Pipeline struct {
 	publisher   StepPublisher
 }
 
-func NewPipeline(config *config.Config, pub StepPublisher, logger *zerolog.Logger) (*Pipeline, error) {
+func NewPipeline(config *config.Config, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
 	fs := fs.NewMemoryFileSystem()
 	llmCfg := llm.LlmConfig{
 		OpenAIAPIKey: config.OpenAIAPIKey,
@@ -70,32 +69,32 @@ func NewPipeline(config *config.Config, pub StepPublisher, logger *zerolog.Logge
 
 func (p *Pipeline) Execute(projectDesc string) error {
 	p.state.ProjectDesc = projectDesc
-	p.state.Logger.Debug().Msg("Starting pipeline execution")
+	p.state.Logger.Info("Starting pipeline execution")
 	for i, stepType := range p.stepManager.steps {
-		p.state.Logger.Debug().Msgf("Attempting to execute step %d: %v", i, stepType)
+		p.state.Logger.Info(fmt.Sprintf("Attempting to execute step %d: %v", i, stepType))
 		step := p.stepManager.GetStep(stepType)
 		if step == nil {
-			p.state.Logger.Error().Msgf("Step %v not found", stepType)
+			p.state.Logger.Error(fmt.Sprintf("Step %v not found", stepType))
 			p.publisher.Error(stepType, fmt.Errorf("step %v not found", stepType))
 			return fmt.Errorf("step %v not found", stepType)
 		}
 
 		startTime := time.Now()
 		if err := step.Execute(p.state); err != nil {
-			p.state.Logger.Error().Err(err).Msgf("Error executing step %v", stepType)
+			p.state.Logger.Error(fmt.Sprintf("Error executing step %v", stepType))
 			p.publisher.Error(stepType, err)
 			return err
 		}
 		duration := time.Since(startTime)
-		p.state.Logger.Debug().Msgf("Step %v completed in %v", stepType, duration)
+		p.state.Logger.Info(fmt.Sprintf("Step %v completed in %v", stepType, duration))
 		p.publisher.PublishStep(stepType)
 
 		if i < len(p.stepManager.steps)-1 {
-			p.state.Logger.Debug().Msgf("Transitioning from step %v to step %v", stepType, p.stepManager.steps[i+1])
+			p.state.Logger.Info(fmt.Sprintf("Transitioning from step %v to step %v", stepType, p.stepManager.steps[i+1]))
 		}
 	}
 
-	p.state.Logger.Debug().Msg("Pipeline execution completed")
+	p.state.Logger.Info("Pipeline execution completed")
 	return nil
 }
 

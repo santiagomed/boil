@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	blogger "github.com/santiagomed/boil/logger"
 	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/core"
+	"github.com/santiagomed/boil/pkg/logger"
 	"github.com/santiagomed/boil/pkg/utils"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -17,7 +19,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/list"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 )
 
@@ -34,10 +35,10 @@ const (
 type CliStepPublisher struct {
 	stepChan  chan core.StepType
 	errorChan chan error
-	logger    *zerolog.Logger
+	logger    logger.Logger
 }
 
-func NewCliStepPublisher(logger *zerolog.Logger) *CliStepPublisher {
+func NewCliStepPublisher(logger logger.Logger) *CliStepPublisher {
 	return &CliStepPublisher{
 		stepChan:  make(chan core.StepType, 100), // Buffer size of 100
 		errorChan: make(chan error, 10),          // Buffer size of 10
@@ -48,18 +49,18 @@ func NewCliStepPublisher(logger *zerolog.Logger) *CliStepPublisher {
 func (p *CliStepPublisher) PublishStep(step core.StepType) {
 	select {
 	case p.stepChan <- step:
-		p.logger.Debug().Msgf("Successfully published step: %v", step)
+		p.logger.Debug(fmt.Sprintf("Successfully published step: %v", step))
 	default:
-		p.logger.Warn().Msgf("Failed to publish step: %v. Channel full.", step)
+		p.logger.Warn(fmt.Sprintf("Failed to publish step: %v. Channel full.", step))
 	}
 }
 
 func (p *CliStepPublisher) Error(step core.StepType, err error) {
 	select {
 	case p.errorChan <- err:
-		p.logger.Debug().Err(err).Msgf("Successfully published error for step: %v", step)
+		p.logger.Debug(fmt.Sprintf("Successfully published error for step: %v", step))
 	default:
-		p.logger.Warn().Err(err).Msgf("Failed to publish error for step: %v. Channel full.", step)
+		p.logger.Warn(fmt.Sprintf("Failed to publish error for step: %v. Channel full.", step))
 	}
 }
 
@@ -76,7 +77,7 @@ type model struct {
 	engineCancel    context.CancelFunc
 	answers         []string
 	publisher       *CliStepPublisher
-	logger          *zerolog.Logger
+	logger          logger.Logger
 }
 
 type flags struct {
@@ -91,8 +92,9 @@ func initialModel(prompt string, f flags) (model, error) {
 	ti.CharLimit = 156
 	ti.Width = 80
 
-	logger := utils.GetLogger()
-	logger.Debug().Msg("Initializing Boil CLI")
+	blogger.InitLogger()
+	logger := blogger.GetLogger()
+	logger.Debug("Initializing Boil CLI")
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
@@ -176,7 +178,7 @@ func (m *model) handleQuestionsState(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) handleQuit(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC || msg.Type == tea.KeyEsc {
-		m.logger.Debug().Msg("User exited the application")
+		m.logger.Debug("User exited the application")
 		style := lipgloss.NewStyle().Faint(true)
 		message := "Interrupted. Exiting application..."
 		message = style.Render(message)
@@ -250,7 +252,7 @@ func (m *model) listenForNextStep() tea.Msg {
 	case step := <-m.publisher.stepChan:
 		return step
 	case err := <-m.publisher.errorChan:
-		m.logger.Error().Err(err).Msg("Error received during project generation")
+		m.logger.Error(fmt.Sprintf("Error received during project generation: %v", err))
 		return err
 	}
 }
@@ -265,7 +267,7 @@ func (m *model) startProjectGeneration() tea.Cmd {
 			}
 			return core.FinalizeProject
 		case <-time.After(3 * time.Minute):
-			m.logger.Error().Msg("Project generation timed out")
+			m.logger.Error("Project generation timed out")
 			return errors.New("project generation timed out")
 		}
 	}
@@ -273,7 +275,7 @@ func (m *model) startProjectGeneration() tea.Cmd {
 }
 
 func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
-	m.logger.Debug().Msgf("Received step: %v", step)
+	m.logger.Debug(fmt.Sprintf("Received step: %v", step))
 	m.completedSteps = append(m.completedSteps, step)
 	if step == core.FinalizeProject {
 		m.state = Finished
@@ -283,26 +285,26 @@ func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
-	m.logger.Debug().Msg("Finalizing project")
+	m.logger.Debug("Finalizing project")
 	projectName := m.config.ProjectName
 	zipFileName := fmt.Sprintf("%s.zip", projectName)
-	m.logger.Debug().Msgf("Unzipping file: %s", zipFileName)
+	m.logger.Debug(fmt.Sprintf("Unzipping file: %s", zipFileName))
 
 	err := utils.Unzip(zipFileName, projectName)
 	if err != nil {
-		m.logger.Error().Err(err).Msg("Failed to unzip project file")
+		m.logger.Error(fmt.Sprintf("Failed to unzip project file: %v", err))
 		return m, tea.Quit
 	}
 
-	m.logger.Debug().Msg("Project unzipped successfully")
+	m.logger.Debug("Project unzipped successfully")
 
 	err = os.Remove(zipFileName)
 	if err != nil {
-		m.logger.Error().Err(err).Msg("Failed to delete zip file")
+		m.logger.Error(fmt.Sprintf("Failed to delete zip file: %v", err))
 		return m, tea.Quit
 	}
 
-	m.logger.Debug().Msgf("Deleted zip file: %s", zipFileName)
+	m.logger.Debug(fmt.Sprintf("Deleted zip file: %s", zipFileName))
 	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 	outProjectName := nameStyle.Render(projectName)
 	finalMsg := fmt.Sprintf("Project generated in directory: %s", outProjectName)
@@ -410,7 +412,7 @@ func (m model) View() string {
 	case Finished:
 		return "Project generated successfully!"
 	default:
-		m.logger.Error().Msg("An error occurred")
+		m.logger.Error("An error occurred")
 		return "An error occurred."
 	}
 }
