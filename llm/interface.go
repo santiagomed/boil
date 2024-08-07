@@ -1,6 +1,6 @@
 package llm
 
-import "github.com/santiagomed/boil/pkg/fs"
+import "github.com/santiagomed/boil/fs"
 
 type LLMClient interface {
 	GenerateProjectDetails(projectDesc string) (string, error)

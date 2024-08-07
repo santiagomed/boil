@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/santiagomed/boil/pkg/fs"
+	"github.com/santiagomed/boil/fs"
 
 	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"

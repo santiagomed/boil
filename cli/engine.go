@@ -1,22 +1,24 @@
-package core
+package cli
 
 import (
 	"context"
 	"sync"
 	"time"
 
-	"github.com/santiagomed/boil/pkg/logger"
-	"github.com/santiagomed/boil/pkg/request"
+	"github.com/santiagomed/boil/core"
+	"github.com/santiagomed/boil/fs"
+	"github.com/santiagomed/boil/llm"
+	"github.com/santiagomed/boil/logger"
 )
 
 type ExecutionRequest struct {
-	Request    *request.Request
+	Request    *core.Request
 	ResultChan chan error
 	CreatedAt  time.Time
 }
 
 type Engine struct {
-	pub          StepPublisher
+	pub          core.StepPublisher
 	logger       logger.Logger
 	requests     chan ExecutionRequest
 	workers      int
@@ -24,7 +26,7 @@ type Engine struct {
 	shutdownChan chan struct{}
 }
 
-func NewProjectEngine(pub StepPublisher, l logger.Logger, workers int) (*Engine, error) {
+func NewProjectEngine(pub core.StepPublisher, l logger.Logger, workers int) (*Engine, error) {
 	if l == nil {
 		l = logger.NewNullLogger()
 	}
@@ -49,13 +51,27 @@ func (e *Engine) worker(ctx context.Context) {
 	for {
 		select {
 		case req := <-e.requests:
-			pipeline, err := NewPipeline(req.Request, e.pub, e.logger)
+			r := req.Request
+			fs := fs.NewMemoryFileSystem()
+			llmCfg := llm.LlmConfig{
+				OpenAIAPIKey: r.OpenAIAPIKey,
+				ModelName:    r.ModelName,
+				ProjectName:  r.ProjectName,
+			}
+			llm, err := llm.NewClient(&llmCfg)
 			if err != nil {
 				req.ResultChan <- err
 				close(req.ResultChan)
 				continue
 			}
-			err = pipeline.Execute(req.Request.ProjectDescription)
+			stepManager := core.NewDefaultStepManager(llm, fs)
+			pipeline, err := core.NewPipeline(req.Request, llm, stepManager, e.pub, e.logger)
+			if err != nil {
+				req.ResultChan <- err
+				close(req.ResultChan)
+				continue
+			}
+			err = pipeline.Execute()
 			req.ResultChan <- err
 			close(req.ResultChan)
 		case <-ctx.Done():
@@ -66,7 +82,7 @@ func (e *Engine) worker(ctx context.Context) {
 	}
 }
 
-func (e *Engine) AddRequest(request *request.Request) chan error {
+func (e *Engine) AddRequest(request *core.Request) chan error {
 	resultChan := make(chan error, 1)
 	e.requests <- ExecutionRequest{
 		Request:    request,

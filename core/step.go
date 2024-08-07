@@ -4,44 +4,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/santiagomed/boil/pkg/fs"
-	"github.com/santiagomed/boil/pkg/llm"
-	"github.com/santiagomed/boil/pkg/utils"
+	"github.com/santiagomed/boil/fs"
+	"github.com/santiagomed/boil/llm"
+	"github.com/santiagomed/boil/utils"
 )
-
-type StepManager struct {
-	steps   []StepType
-	stepMap map[StepType]Step
-}
-
-func NewStepManager(llm llm.LLMClient, fs *fs.FileSystem) *StepManager {
-	return &StepManager{
-		stepMap: map[StepType]Step{
-			GenerateProjectDetails:   &GenerateProjectDetailsStep{llm: llm},
-			GenerateFileTree:         &GenerateFileTreeStep{llm: llm},
-			GenerateFileOperations:   &GenerateFileOperationsStep{llm: llm},
-			ExecuteFileOperations:    &ExecuteFileOperationsStep{fs: fs},
-			DetermineFileOrder:       &DetermineFileOrderStep{llm: llm},
-			GenerateFileContents:     &GenerateFileContentsStep{llm: llm, fs: fs},
-			CreateOptionalComponents: &CreateOptionalComponentsStep{llm: llm, fs: fs},
-			FinalizeProject:          &FinalizeProjectStep{fs: fs},
-		},
-		steps: []StepType{
-			GenerateProjectDetails,
-			GenerateFileTree,
-			GenerateFileOperations,
-			ExecuteFileOperations,
-			DetermineFileOrder,
-			GenerateFileContents,
-			CreateOptionalComponents,
-			FinalizeProject,
-		},
-	}
-}
-
-func (sm *StepManager) GetStep(stepType StepType) Step {
-	return sm.stepMap[stepType]
-}
 
 type GenerateProjectDetailsStep struct {
 	llm llm.LLMClient
@@ -49,7 +15,7 @@ type GenerateProjectDetailsStep struct {
 
 func (s *GenerateProjectDetailsStep) Execute(state *State) error {
 	state.Logger.Info("Generating project details.")
-	details, err := s.llm.GenerateProjectDetails(state.ProjectDesc)
+	details, err := s.llm.GenerateProjectDetails(state.Request.ProjectDescription)
 	if err != nil {
 		state.Logger.Error(fmt.Sprintf("Failed to generate project details: %v", err))
 		return fmt.Errorf("failed to generate project details: %w", err)
@@ -231,4 +197,47 @@ func (s *FinalizeProjectStep) Execute(state *State) error {
 
 	state.Logger.Info("Project finalized successfully")
 	return nil
+}
+
+type StepManager interface {
+	GetStep(stepType StepType) Step
+	GetSteps() []StepType
+}
+
+type DefaultStepManager struct {
+	steps   []StepType
+	stepMap map[StepType]Step
+}
+
+func NewDefaultStepManager(llm llm.LLMClient, fs *fs.FileSystem) *DefaultStepManager {
+	return &DefaultStepManager{
+		stepMap: map[StepType]Step{
+			GenerateProjectDetails:   &GenerateProjectDetailsStep{llm: llm},
+			GenerateFileTree:         &GenerateFileTreeStep{llm: llm},
+			GenerateFileOperations:   &GenerateFileOperationsStep{llm: llm},
+			ExecuteFileOperations:    &ExecuteFileOperationsStep{fs: fs},
+			DetermineFileOrder:       &DetermineFileOrderStep{llm: llm},
+			GenerateFileContents:     &GenerateFileContentsStep{llm: llm, fs: fs},
+			CreateOptionalComponents: &CreateOptionalComponentsStep{llm: llm, fs: fs},
+			FinalizeProject:          &FinalizeProjectStep{fs: fs},
+		},
+		steps: []StepType{
+			GenerateProjectDetails,
+			GenerateFileTree,
+			GenerateFileOperations,
+			ExecuteFileOperations,
+			DetermineFileOrder,
+			GenerateFileContents,
+			CreateOptionalComponents,
+			FinalizeProject,
+		},
+	}
+}
+
+func (sm *DefaultStepManager) GetStep(stepType StepType) Step {
+	return sm.stepMap[stepType]
+}
+
+func (sm *DefaultStepManager) GetSteps() []StepType {
+	return sm.steps
 }

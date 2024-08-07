@@ -8,11 +8,9 @@ import (
 	"strings"
 	"time"
 
-	blogger "github.com/santiagomed/boil/logger"
-	"github.com/santiagomed/boil/pkg/core"
-	"github.com/santiagomed/boil/pkg/logger"
-	"github.com/santiagomed/boil/pkg/request"
-	"github.com/santiagomed/boil/pkg/utils"
+	"github.com/santiagomed/boil/core"
+	"github.com/santiagomed/boil/logger"
+	"github.com/santiagomed/boil/utils"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -68,10 +66,10 @@ type model struct {
 	textInput       textinput.Model
 	spinner         spinner.Model
 	state           state
-	request         *request.Request
+	request         *core.Request
 	currentQuestion int
 	completedSteps  []core.StepType
-	engine          *core.Engine
+	engine          *Engine
 	engineCtx       context.Context
 	engineCancel    context.CancelFunc
 	answers         []string
@@ -91,15 +89,15 @@ func initialModel(prompt string, f flags) (model, error) {
 	ti.CharLimit = 156
 	ti.Width = 80
 
-	blogger.InitLogger()
-	logger := blogger.GetLogger()
+	InitLogger()
+	logger := GetLogger()
 	logger.Debug("Initializing Boil CLI")
 
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("202"))
 
-	req := request.DefaultRequest()
+	req := core.DefaultRequest()
 	if f.name != "" {
 		req.ProjectName = f.name
 	}
@@ -107,7 +105,7 @@ func initialModel(prompt string, f flags) (model, error) {
 	req.ProjectDescription = utils.SanitizeInput(prompt)
 
 	publisher := NewCliStepPublisher(logger)
-	engine, err := core.NewProjectEngine(publisher, logger, 1)
+	engine, err := NewProjectEngine(publisher, logger, 1)
 	if err != nil {
 		return model{}, err
 	}
@@ -254,7 +252,7 @@ func (m *model) startProjectGeneration() tea.Cmd {
 			if err != nil {
 				return err
 			}
-			return core.FinalizeProject
+			return nil
 		case <-time.After(3 * time.Minute):
 			m.logger.Error("Project generation timed out")
 			return errors.New("project generation timed out")
@@ -297,6 +295,7 @@ func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
 	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 	outProjectName := nameStyle.Render(projectName)
 	finalMsg := fmt.Sprintf("Project generated in directory: %s", outProjectName)
+
 	return m, tea.Printf("%s", finalMsg)
 }
 

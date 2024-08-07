@@ -5,9 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/santiagomed/boil/pkg/fs"
-	"github.com/santiagomed/boil/pkg/logger"
-	"github.com/santiagomed/boil/pkg/request"
+	"github.com/santiagomed/boil/fs"
+	"github.com/santiagomed/boil/logger"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -133,7 +132,7 @@ func TestPipeline_Execute(t *testing.T) {
 	mockLLM.On("GenerateGitignoreContent", mock.Anything).Return("Gitignore content", nil)
 	mockLLM.On("GenerateDockerfileContent", mock.Anything).Return("Dockerfile content", nil)
 
-	r := &request.Request{
+	r := &Request{
 		ProjectDescription: "Test project description",
 		ProjectName:        "test-project",
 		GitRepo:            true,
@@ -149,7 +148,7 @@ func TestPipeline_Execute(t *testing.T) {
 	realPublisher := NewPublisher()
 
 	pipeline := &Pipeline{
-		stepManager: NewStepManager(mockLLM, memFS),
+		stepManager: NewDefaultStepManager(mockLLM, memFS),
 		state: &State{
 			Request:       r,
 			PreviousFiles: make(map[string]string),
@@ -168,7 +167,7 @@ func TestPipeline_Execute(t *testing.T) {
 
 	// Execute the pipeline in a goroutine
 	go func() {
-		err := pipeline.Execute("Test project description")
+		err := pipeline.Execute()
 		assert.NoError(t, err)
 		close(realPublisher.stepChan)
 	}()

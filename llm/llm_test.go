@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/santiagomed/boil/pkg/fs"
+	"github.com/santiagomed/boil/fs"
 )
 
 type Cache struct {

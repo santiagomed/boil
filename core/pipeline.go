@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/santiagomed/boil/pkg/fs"
-	"github.com/santiagomed/boil/pkg/llm"
-	"github.com/santiagomed/boil/pkg/logger"
-	"github.com/santiagomed/boil/pkg/request"
+	"github.com/santiagomed/boil/fs"
+	"github.com/santiagomed/boil/llm"
+	"github.com/santiagomed/boil/logger"
 )
 
 type Step interface {
@@ -28,34 +27,22 @@ const (
 )
 
 type State struct {
-	ProjectDesc    string
 	ProjectDetails string
 	FileTree       string
 	FileOperations []fs.FileOperation
 	FileOrder      []string
 	PreviousFiles  map[string]string
-	Request        *request.Request
+	Request        *Request
 	Logger         logger.Logger
 }
 
 type Pipeline struct {
-	stepManager *StepManager
+	stepManager StepManager
 	state       *State
 	publisher   StepPublisher
 }
 
-func NewPipeline(r *request.Request, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
-	fs := fs.NewMemoryFileSystem()
-	llmCfg := llm.LlmConfig{
-		OpenAIAPIKey: r.OpenAIAPIKey,
-		ModelName:    r.ModelName,
-		ProjectName:  r.ProjectName,
-	}
-	llm, err := llm.NewClient(&llmCfg)
-	if err != nil {
-		return nil, err
-	}
-	stepManager := NewStepManager(llm, fs)
+func NewPipeline(r *Request, llm llm.LLMClient, sm StepManager, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
 	return &Pipeline{
 		state: &State{
 			Request:       r,
@@ -63,14 +50,14 @@ func NewPipeline(r *request.Request, pub StepPublisher, logger logger.Logger) (*
 			Logger:        logger,
 		},
 		publisher:   pub,
-		stepManager: stepManager,
+		stepManager: sm,
 	}, nil
 }
 
-func (p *Pipeline) Execute(projectDesc string) error {
-	p.state.ProjectDesc = projectDesc
+func (p *Pipeline) Execute() error {
+	steps := p.stepManager.GetSteps()
 	p.state.Logger.Info("Starting pipeline execution")
-	for i, stepType := range p.stepManager.steps {
+	for i, stepType := range steps {
 		p.state.Logger.Info(fmt.Sprintf("Attempting to execute step %d: %v", i, stepType))
 		step := p.stepManager.GetStep(stepType)
 		if step == nil {
@@ -89,8 +76,8 @@ func (p *Pipeline) Execute(projectDesc string) error {
 		p.state.Logger.Info(fmt.Sprintf("Step %v completed in %v", stepType, duration))
 		p.publisher.PublishStep(stepType)
 
-		if i < len(p.stepManager.steps)-1 {
-			p.state.Logger.Info(fmt.Sprintf("Transitioning from step %v to step %v", stepType, p.stepManager.steps[i+1]))
+		if i < len(steps)-1 {
+			p.state.Logger.Info(fmt.Sprintf("Transitioning from step %v to step %v", stepType, steps[i+1]))
 		}
 	}
 
