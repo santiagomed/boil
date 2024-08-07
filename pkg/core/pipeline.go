@@ -5,9 +5,8 @@ import (
 	"time"
 
 	"github.com/santiagomed/boil/pkg/config"
+	"github.com/santiagomed/boil/pkg/fs"
 	"github.com/santiagomed/boil/pkg/llm"
-	"github.com/santiagomed/boil/pkg/tempdir"
-	"github.com/santiagomed/boil/pkg/utils"
 
 	"github.com/rs/zerolog"
 )
@@ -19,8 +18,7 @@ type Step interface {
 type StepType int
 
 const (
-	CreateTempDir StepType = iota
-	GenerateProjectDetails
+	GenerateProjectDetails StepType = iota
 	GenerateFileTree
 	GenerateFileOperations
 	ExecuteFileOperations
@@ -32,69 +30,73 @@ const (
 
 type State struct {
 	ProjectDesc    string
-	TempDir        *tempdir.Manager
-	TempDirPath    string
 	ProjectDetails string
 	FileTree       string
-	FileOperations []utils.FileOperation
+	FileOperations []fs.FileOperation
 	FileOrder      []string
 	PreviousFiles  map[string]string
 	Config         *config.Config
-	Llm            *llm.Client
 	Logger         *zerolog.Logger
 }
 
 type Pipeline struct {
-	steps     []StepType
-	state     *State
-	publisher StepPublisher
+	stepManager *StepManager
+	state       *State
+	publisher   StepPublisher
 }
 
-func NewPipeline(config *config.Config, llm *llm.Client, pub StepPublisher, logger *zerolog.Logger) *Pipeline {
+func NewPipeline(config *config.Config, pub StepPublisher, logger *zerolog.Logger) (*Pipeline, error) {
+	fs := fs.NewMemoryFileSystem()
+	llmCfg := llm.LlmConfig{
+		OpenAIAPIKey: config.OpenAIAPIKey,
+		ModelName:    config.ModelName,
+		ProjectName:  config.ProjectName,
+	}
+	llm, err := llm.NewClient(&llmCfg)
+	if err != nil {
+		return nil, err
+	}
+	stepManager := NewStepManager(llm, fs)
 	return &Pipeline{
 		state: &State{
 			Config:        config,
-			Llm:           llm,
 			PreviousFiles: make(map[string]string),
 			Logger:        logger,
 		},
-		publisher: pub,
-	}
+		publisher:   pub,
+		stepManager: stepManager,
+	}, nil
 }
 
-func (p *Pipeline) AddStep(step StepType) {
-	p.steps = append(p.steps, step)
-}
-
-func (p *Pipeline) Execute(projectDesc string) {
+func (p *Pipeline) Execute(projectDesc string) error {
 	p.state.ProjectDesc = projectDesc
 	p.state.Logger.Debug().Msg("Starting pipeline execution")
-
-	for i, stepType := range p.steps {
+	for i, stepType := range p.stepManager.steps {
 		p.state.Logger.Debug().Msgf("Attempting to execute step %d: %v", i, stepType)
-		step := GetStep(stepType)
+		step := p.stepManager.GetStep(stepType)
 		if step == nil {
 			p.state.Logger.Error().Msgf("Step %v not found", stepType)
 			p.publisher.Error(stepType, fmt.Errorf("step %v not found", stepType))
-			return
+			return fmt.Errorf("step %v not found", stepType)
 		}
 
 		startTime := time.Now()
 		if err := step.Execute(p.state); err != nil {
 			p.state.Logger.Error().Err(err).Msgf("Error executing step %v", stepType)
 			p.publisher.Error(stepType, err)
-			return
+			return err
 		}
 		duration := time.Since(startTime)
 		p.state.Logger.Debug().Msgf("Step %v completed in %v", stepType, duration)
 		p.publisher.PublishStep(stepType)
 
-		if i < len(p.steps)-1 {
-			p.state.Logger.Debug().Msgf("Transitioning from step %v to step %v", stepType, p.steps[i+1])
+		if i < len(p.stepManager.steps)-1 {
+			p.state.Logger.Debug().Msgf("Transitioning from step %v to step %v", stepType, p.stepManager.steps[i+1])
 		}
 	}
 
 	p.state.Logger.Debug().Msg("Pipeline execution completed")
+	return nil
 }
 
 type StepPublisher interface {

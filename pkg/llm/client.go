@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
-	"github.com/santiagomed/boil/pkg/utils"
+	"github.com/santiagomed/boil/pkg/fs"
 
 	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"
@@ -73,14 +74,14 @@ func (c *Client) DetermineFileOrder(fileTree string) ([]string, error) {
 }
 
 // GenerateFileOperations generates file operations for creating a specific file
-func (c *Client) GenerateFileOperations(projectDetails, fileTree string) ([]utils.FileOperation, error) {
+func (c *Client) GenerateFileOperations(projectDetails, fileTree string) ([]fs.FileOperation, error) {
 	prompt := getFileOperationsPrompt(projectDetails, fileTree)
 	response, err := c.getCompletion(prompt, "json_object")
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate file operations: %w", err)
 	}
 
-	var operations map[string][]utils.FileOperation
+	var operations map[string][]fs.FileOperation
 	err = json.Unmarshal([]byte(response), &operations)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing file operations: %w", err)
@@ -96,7 +97,13 @@ func (c *Client) GenerateFileOperations(projectDetails, fileTree string) ([]util
 // GenerateFileContent generates content for a specific file
 func (c *Client) GenerateFileContent(fileName, projectDetails, fileTree string, previousFiles map[string]string) (string, error) {
 	prompt := getFileContentPrompt(fileName, projectDetails, fileTree, previousFiles)
-	content, err := c.getCompletion(prompt, "text")
+	var responseType openai.ChatCompletionResponseFormatType
+	if strings.HasSuffix(fileName, ".json") {
+		responseType = "json_object"
+	} else {
+		responseType = "text"
+	}
+	content, err := c.getCompletion(prompt, responseType)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate file content for %s: %w", fileName, err)
 	}
