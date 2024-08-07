@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/fs"
 	"github.com/santiagomed/boil/pkg/llm"
 	"github.com/santiagomed/boil/pkg/logger"
+	"github.com/santiagomed/boil/pkg/request"
 )
 
 type Step interface {
@@ -34,7 +34,7 @@ type State struct {
 	FileOperations []fs.FileOperation
 	FileOrder      []string
 	PreviousFiles  map[string]string
-	Config         *config.Config
+	Request        *request.Request
 	Logger         logger.Logger
 }
 
@@ -44,12 +44,12 @@ type Pipeline struct {
 	publisher   StepPublisher
 }
 
-func NewPipeline(config *config.Config, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
+func NewPipeline(r *request.Request, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
 	fs := fs.NewMemoryFileSystem()
 	llmCfg := llm.LlmConfig{
-		OpenAIAPIKey: config.OpenAIAPIKey,
-		ModelName:    config.ModelName,
-		ProjectName:  config.ProjectName,
+		OpenAIAPIKey: r.OpenAIAPIKey,
+		ModelName:    r.ModelName,
+		ProjectName:  r.ProjectName,
 	}
 	llm, err := llm.NewClient(&llmCfg)
 	if err != nil {
@@ -58,7 +58,7 @@ func NewPipeline(config *config.Config, pub StepPublisher, logger logger.Logger)
 	stepManager := NewStepManager(llm, fs)
 	return &Pipeline{
 		state: &State{
-			Config:        config,
+			Request:       r,
 			PreviousFiles: make(map[string]string),
 			Logger:        logger,
 		},

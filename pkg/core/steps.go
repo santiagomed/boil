@@ -159,7 +159,7 @@ type CreateOptionalComponentsStep struct {
 func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 	state.Logger.Info("Creating optional components.")
 
-	if state.Config.GitRepo {
+	if state.Request.GitRepo {
 		state.Logger.Info("Initializing Git repository.")
 		if err := s.fs.InitializeGitRepo(); err != nil {
 			state.Logger.Error(fmt.Sprintf("Failed to initialize Git repository: %v", err))
@@ -168,7 +168,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 		state.Logger.Info("Git repository initialized successfully")
 	}
 
-	if state.Config.GitIgnore {
+	if state.Request.GitIgnore {
 		state.Logger.Info("Creating .gitignore file.")
 		gitignore, err := s.llm.GenerateGitignoreContent(state.ProjectDetails)
 		if err != nil {
@@ -182,7 +182,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 		state.Logger.Info(".gitignore file created successfully")
 	}
 
-	if state.Config.Readme {
+	if state.Request.Readme {
 		state.Logger.Info("Generating README.md.")
 		readme, err := s.llm.GenerateReadmeContent(state.ProjectDetails)
 		if err != nil {
@@ -196,7 +196,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 		state.Logger.Info("README.md created successfully")
 	}
 
-	if state.Config.Dockerfile {
+	if state.Request.Dockerfile {
 		state.Logger.Info("Generating Dockerfile.")
 		dockerfile, err := s.llm.GenerateDockerfileContent(state.ProjectDetails)
 		if err != nil {
@@ -220,7 +220,7 @@ type FinalizeProjectStep struct {
 
 func (s *FinalizeProjectStep) Execute(state *State) error {
 	state.Logger.Info("Finalizing project.")
-	projectName := utils.FormatProjectName(state.Config.ProjectName)
+	projectName := utils.FormatProjectName(state.Request.ProjectName)
 
 	zipPath := filepath.Join(".", projectName+".zip")
 	state.Logger.Info(fmt.Sprintf("Writing project to zip file: %s", zipPath))

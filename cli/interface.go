@@ -9,9 +9,9 @@ import (
 	"time"
 
 	blogger "github.com/santiagomed/boil/logger"
-	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/core"
 	"github.com/santiagomed/boil/pkg/logger"
+	"github.com/santiagomed/boil/pkg/request"
 	"github.com/santiagomed/boil/pkg/utils"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -67,9 +67,8 @@ func (p *CliStepPublisher) Error(step core.StepType, err error) {
 type model struct {
 	textInput       textinput.Model
 	spinner         spinner.Model
-	projectDesc     string
 	state           state
-	config          *config.Config
+	request         *request.Request
 	currentQuestion int
 	completedSteps  []core.StepType
 	engine          *core.Engine
@@ -100,24 +99,15 @@ func initialModel(prompt string, f flags) (model, error) {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("202"))
 
-	var cfg *config.Config
-	if f.config != "" {
-		var err error
-		cfg, err = config.LoadConfig(f.config)
-		if err != nil {
-			return model{}, err
-		}
-	} else {
-		cfg = config.DefaultConfig()
-	}
+	req := request.DefaultRequest()
 	if f.name != "" {
-		cfg.ProjectName = f.name
+		req.ProjectName = f.name
 	}
 
-	projectDesc := utils.SanitizeInput(prompt)
+	req.ProjectDescription = utils.SanitizeInput(prompt)
 
 	publisher := NewCliStepPublisher(logger)
-	engine, err := core.NewProjectEngine(cfg, publisher, logger, 1)
+	engine, err := core.NewProjectEngine(publisher, logger, 1)
 	if err != nil {
 		return model{}, err
 	}
@@ -129,8 +119,7 @@ func initialModel(prompt string, f flags) (model, error) {
 		spinner:         s,
 		state:           Input,
 		logger:          logger,
-		projectDesc:     projectDesc,
-		config:          cfg,
+		request:         req,
 		engine:          engine,
 		engineCtx:       ctx,
 		engineCancel:    cancel,
@@ -202,7 +191,7 @@ func (m *model) handleKeyEnter() (tea.Model, tea.Cmd) {
 	}
 	// Input, run query.
 	m.textInput.SetValue("")
-	m.projectDesc = v
+	m.request.ProjectDescription = v
 	m.state = Questions
 	placeholderStyle := lipgloss.NewStyle().Faint(true).Width(80)
 	message := placeholderStyle.Render(fmt.Sprintf("> %s", v))
@@ -226,13 +215,13 @@ func (m *model) handleQuestionAnswer(answer string) (tea.Model, tea.Cmd) {
 
 	switch m.currentQuestion {
 	case 0:
-		m.config.GitRepo = answer == "y"
+		m.request.GitRepo = answer == "y"
 	case 1:
-		m.config.GitIgnore = answer == "y"
+		m.request.GitIgnore = answer == "y"
 	case 2:
-		m.config.Readme = answer == "y"
+		m.request.Readme = answer == "y"
 	case 3:
-		m.config.Dockerfile = answer == "y"
+		m.request.Dockerfile = answer == "y"
 	}
 
 	m.currentQuestion++
@@ -258,7 +247,7 @@ func (m *model) listenForNextStep() tea.Msg {
 }
 
 func (m *model) startProjectGeneration() tea.Cmd {
-	resultChan := m.engine.AddRequest(m.projectDesc)
+	resultChan := m.engine.AddRequest(m.request)
 	listenForError := func() tea.Msg {
 		select {
 		case err := <-resultChan:
@@ -286,7 +275,7 @@ func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
 
 func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
 	m.logger.Debug("Finalizing project")
-	projectName := m.config.ProjectName
+	projectName := m.request.ProjectName
 	zipFileName := fmt.Sprintf("%s.zip", projectName)
 	m.logger.Debug(fmt.Sprintf("Unzipping file: %s", zipFileName))
 
@@ -418,10 +407,10 @@ func (m model) View() string {
 }
 
 func (m *model) updateConfig() {
-	m.config.GitRepo = m.answers[0] == "y"
-	m.config.GitIgnore = m.answers[1] == "y"
-	m.config.Readme = m.answers[2] == "y"
-	m.config.Dockerfile = m.answers[3] == "y"
+	m.request.GitRepo = m.answers[0] == "y"
+	m.request.GitIgnore = m.answers[1] == "y"
+	m.request.Readme = m.answers[2] == "y"
+	m.request.Dockerfile = m.answers[3] == "y"
 }
 
 func (m *model) Shutdown() {

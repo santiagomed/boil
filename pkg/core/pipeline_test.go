@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/fs"
 	"github.com/santiagomed/boil/pkg/logger"
+	"github.com/santiagomed/boil/pkg/request"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
@@ -133,14 +133,15 @@ func TestPipeline_Execute(t *testing.T) {
 	mockLLM.On("GenerateGitignoreContent", mock.Anything).Return("Gitignore content", nil)
 	mockLLM.On("GenerateDockerfileContent", mock.Anything).Return("Dockerfile content", nil)
 
-	cfg := &config.Config{
-		ProjectName:  "test-project",
-		ModelName:    "test-model",
-		OpenAIAPIKey: "test-key",
-		GitRepo:      true,
-		GitIgnore:    true,
-		Dockerfile:   true,
-		Readme:       true,
+	r := &request.Request{
+		ProjectDescription: "Test project description",
+		ProjectName:        "test-project",
+		GitRepo:            true,
+		GitIgnore:          true,
+		Dockerfile:         true,
+		Readme:             true,
+		OpenAIAPIKey:       "test-key",
+		ModelName:          "test-model",
 	}
 
 	// Use real FileSystem and StepPublisher
@@ -150,7 +151,7 @@ func TestPipeline_Execute(t *testing.T) {
 	pipeline := &Pipeline{
 		stepManager: NewStepManager(mockLLM, memFS),
 		state: &State{
-			Config:        cfg,
+			Request:       r,
 			PreviousFiles: make(map[string]string),
 			Logger:        logger.NewNullLogger(),
 		},

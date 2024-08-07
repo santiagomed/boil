@@ -5,35 +5,33 @@ import (
 	"sync"
 	"time"
 
-	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/logger"
+	"github.com/santiagomed/boil/pkg/request"
 )
 
-type Request struct {
-	ProjectDesc string
-	ResultChan  chan error
-	CreatedAt   time.Time
+type ExecutionRequest struct {
+	Request    *request.Request
+	ResultChan chan error
+	CreatedAt  time.Time
 }
 
 type Engine struct {
-	config       *config.Config
 	pub          StepPublisher
 	logger       logger.Logger
-	requests     chan Request
+	requests     chan ExecutionRequest
 	workers      int
 	workerWG     sync.WaitGroup
 	shutdownChan chan struct{}
 }
 
-func NewProjectEngine(config *config.Config, pub StepPublisher, l logger.Logger, workers int) (*Engine, error) {
+func NewProjectEngine(pub StepPublisher, l logger.Logger, workers int) (*Engine, error) {
 	if l == nil {
 		l = logger.NewNullLogger()
 	}
 	return &Engine{
-		config:       config,
 		pub:          pub,
 		logger:       l,
-		requests:     make(chan Request, 1000), // Buffered channel
+		requests:     make(chan ExecutionRequest, 1000), // Buffered channel
 		workers:      workers,
 		shutdownChan: make(chan struct{}),
 	}, nil
@@ -51,13 +49,13 @@ func (e *Engine) worker(ctx context.Context) {
 	for {
 		select {
 		case req := <-e.requests:
-			pipeline, err := NewPipeline(e.config, e.pub, e.logger)
+			pipeline, err := NewPipeline(req.Request, e.pub, e.logger)
 			if err != nil {
 				req.ResultChan <- err
 				close(req.ResultChan)
 				continue
 			}
-			err = pipeline.Execute(req.ProjectDesc)
+			err = pipeline.Execute(req.Request.ProjectDescription)
 			req.ResultChan <- err
 			close(req.ResultChan)
 		case <-ctx.Done():
@@ -68,12 +66,12 @@ func (e *Engine) worker(ctx context.Context) {
 	}
 }
 
-func (e *Engine) AddRequest(projectDesc string) chan error {
+func (e *Engine) AddRequest(request *request.Request) chan error {
 	resultChan := make(chan error, 1)
-	e.requests <- Request{
-		ProjectDesc: projectDesc,
-		ResultChan:  resultChan,
-		CreatedAt:   time.Now(),
+	e.requests <- ExecutionRequest{
+		Request:    request,
+		ResultChan: resultChan,
+		CreatedAt:  time.Now(),
 	}
 	return resultChan
 }
