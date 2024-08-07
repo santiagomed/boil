@@ -4,36 +4,52 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/santiagomed/boil/pkg/fs"
+	"github.com/santiagomed/boil/pkg/llm"
 	"github.com/santiagomed/boil/pkg/utils"
 )
 
-var stepMap = map[StepType]Step{
-	GenerateProjectDetails:   &GenerateProjectDetailsStep{},
-	GenerateFileTree:         &GenerateFileTreeStep{},
-	GenerateFileOperations:   &GenerateFileOperationsStep{},
-	ExecuteFileOperations:    &ExecuteFileOperationsStep{},
-	DetermineFileOrder:       &DetermineFileOrderStep{},
-	GenerateFileContents:     &GenerateFileContentsStep{},
-	CreateOptionalComponents: &CreateOptionalComponentsStep{},
-	FinalizeProject:          &FinalizeProjectStep{},
+type StepManager struct {
+	steps   []StepType
+	stepMap map[StepType]Step
 }
 
-func GetStep(stepType StepType) Step {
-	return stepMap[stepType]
+func NewStepManager(llm llm.LLMClient, fs *fs.FileSystem) *StepManager {
+	return &StepManager{
+		stepMap: map[StepType]Step{
+			GenerateProjectDetails:   &GenerateProjectDetailsStep{llm: llm},
+			GenerateFileTree:         &GenerateFileTreeStep{llm: llm},
+			GenerateFileOperations:   &GenerateFileOperationsStep{llm: llm},
+			ExecuteFileOperations:    &ExecuteFileOperationsStep{fs: fs},
+			DetermineFileOrder:       &DetermineFileOrderStep{llm: llm},
+			GenerateFileContents:     &GenerateFileContentsStep{llm: llm, fs: fs},
+			CreateOptionalComponents: &CreateOptionalComponentsStep{llm: llm, fs: fs},
+			FinalizeProject:          &FinalizeProjectStep{fs: fs},
+		},
+		steps: []StepType{
+			GenerateProjectDetails,
+			GenerateFileTree,
+			GenerateFileOperations,
+			ExecuteFileOperations,
+			DetermineFileOrder,
+			GenerateFileContents,
+			CreateOptionalComponents,
+			FinalizeProject,
+		},
+	}
 }
 
-type InitialStep struct{}
-
-func (s *InitialStep) Execute(state *State) error {
-	state.Logger.Debug().Msg("Initializing pipeline execution.")
-	return nil
+func (sm *StepManager) GetStep(stepType StepType) Step {
+	return sm.stepMap[stepType]
 }
 
-type GenerateProjectDetailsStep struct{}
+type GenerateProjectDetailsStep struct {
+	llm llm.LLMClient
+}
 
 func (s *GenerateProjectDetailsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating project details.")
-	details, err := state.Llm.GenerateProjectDetails(state.ProjectDesc)
+	details, err := s.llm.GenerateProjectDetails(state.ProjectDesc)
 	if err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to generate project details")
 		return fmt.Errorf("failed to generate project details: %w", err)
@@ -43,11 +59,13 @@ func (s *GenerateProjectDetailsStep) Execute(state *State) error {
 	return nil
 }
 
-type GenerateFileTreeStep struct{}
+type GenerateFileTreeStep struct {
+	llm llm.LLMClient
+}
 
 func (s *GenerateFileTreeStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file tree.")
-	fileTree, err := state.Llm.GenerateFileTree(state.ProjectDetails)
+	fileTree, err := s.llm.GenerateFileTree(state.ProjectDetails)
 	if err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to generate file tree")
 		return fmt.Errorf("failed to generate file tree: %w", err)
@@ -57,11 +75,13 @@ func (s *GenerateFileTreeStep) Execute(state *State) error {
 	return nil
 }
 
-type GenerateFileOperationsStep struct{}
+type GenerateFileOperationsStep struct {
+	llm llm.LLMClient
+}
 
 func (s *GenerateFileOperationsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file operations.")
-	operations, err := state.Llm.GenerateFileOperations(state.ProjectDetails, state.FileTree)
+	operations, err := s.llm.GenerateFileOperations(state.ProjectDetails, state.FileTree)
 	if err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to generate file operations")
 		return fmt.Errorf("failed to generate file operations: %w", err)
@@ -71,11 +91,13 @@ func (s *GenerateFileOperationsStep) Execute(state *State) error {
 	return nil
 }
 
-type ExecuteFileOperationsStep struct{}
+type ExecuteFileOperationsStep struct {
+	fs *fs.FileSystem
+}
 
 func (s *ExecuteFileOperationsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Executing file operations.")
-	err := state.FileSystem.ExecuteFileOperations(state.FileOperations)
+	err := s.fs.ExecuteFileOperations(state.FileOperations)
 	if err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to execute file operations")
 		return fmt.Errorf("failed to execute file operations: %w", err)
@@ -84,11 +106,13 @@ func (s *ExecuteFileOperationsStep) Execute(state *State) error {
 	return nil
 }
 
-type DetermineFileOrderStep struct{}
+type DetermineFileOrderStep struct {
+	llm llm.LLMClient
+}
 
 func (s *DetermineFileOrderStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Determining file creation order.")
-	order, err := state.Llm.DetermineFileOrder(state.FileTree)
+	order, err := s.llm.DetermineFileOrder(state.FileTree)
 	if err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to determine file creation order")
 		return fmt.Errorf("failed to determine file creation order: %w", err)
@@ -98,21 +122,24 @@ func (s *DetermineFileOrderStep) Execute(state *State) error {
 	return nil
 }
 
-type GenerateFileContentsStep struct{}
+type GenerateFileContentsStep struct {
+	llm llm.LLMClient
+	fs  *fs.FileSystem
+}
 
 func (s *GenerateFileContentsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Generating file contents.")
 	for _, file := range state.FileOrder {
-		if state.FileSystem.IsDir(file) {
+		if s.fs.IsDir(file) {
 			continue
 		}
 		state.Logger.Debug().Msgf("Generating content for file %s.", file)
-		content, err := state.Llm.GenerateFileContent(file, state.ProjectDetails, state.FileTree, state.PreviousFiles)
+		content, err := s.llm.GenerateFileContent(file, state.ProjectDetails, state.FileTree, state.PreviousFiles)
 		if err != nil {
 			state.Logger.Error().Err(err).Msgf("Failed to generate content for file %s", file)
 			return fmt.Errorf("failed to generate content for file %s: %w", file, err)
 		}
-		err = state.FileSystem.WriteFile(file, content)
+		err = s.fs.WriteFile(file, content)
 		if err != nil {
 			state.Logger.Error().Err(err).Msgf("Failed to create file %s", file)
 			return fmt.Errorf("failed to create file %s: %w", file, err)
@@ -124,14 +151,17 @@ func (s *GenerateFileContentsStep) Execute(state *State) error {
 	return nil
 }
 
-type CreateOptionalComponentsStep struct{}
+type CreateOptionalComponentsStep struct {
+	llm llm.LLMClient
+	fs  *fs.FileSystem
+}
 
 func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Creating optional components.")
 
 	if state.Config.GitRepo {
 		state.Logger.Debug().Msg("Initializing Git repository.")
-		if err := state.FileSystem.InitializeGitRepo(); err != nil {
+		if err := s.fs.InitializeGitRepo(); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to initialize Git repository")
 			return fmt.Errorf("failed to initialize git repository: %w", err)
 		}
@@ -140,12 +170,12 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Config.GitIgnore {
 		state.Logger.Debug().Msg("Creating .gitignore file.")
-		gitignore, err := state.Llm.GenerateGitignoreContent(state.ProjectDetails)
+		gitignore, err := s.llm.GenerateGitignoreContent(state.ProjectDetails)
 		if err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create .gitignore file")
 			return fmt.Errorf("failed to create .gitignore file: %w", err)
 		}
-		if err := state.FileSystem.WriteFile(".gitignore", gitignore); err != nil {
+		if err := s.fs.WriteFile(".gitignore", gitignore); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create .gitignore file")
 			return fmt.Errorf("failed to create .gitignore file: %w", err)
 		}
@@ -154,12 +184,12 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Config.Readme {
 		state.Logger.Debug().Msg("Generating README.md.")
-		readme, err := state.Llm.GenerateReadmeContent(state.ProjectDetails)
+		readme, err := s.llm.GenerateReadmeContent(state.ProjectDetails)
 		if err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to generate README")
 			return fmt.Errorf("failed to generate README: %w", err)
 		}
-		if err := state.FileSystem.WriteFile("README.md", readme); err != nil {
+		if err := s.fs.WriteFile("README.md", readme); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create README file")
 			return fmt.Errorf("failed to create README file: %w", err)
 		}
@@ -168,12 +198,12 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Config.Dockerfile {
 		state.Logger.Debug().Msg("Generating Dockerfile.")
-		dockerfile, err := state.Llm.GenerateDockerfileContent(state.ProjectDetails)
+		dockerfile, err := s.llm.GenerateDockerfileContent(state.ProjectDetails)
 		if err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to generate Dockerfile")
 			return fmt.Errorf("failed to generate Dockerfile: %w", err)
 		}
-		if err := state.FileSystem.WriteFile("Dockerfile", dockerfile); err != nil {
+		if err := s.fs.WriteFile("Dockerfile", dockerfile); err != nil {
 			state.Logger.Error().Err(err).Msg("Failed to create Dockerfile")
 			return fmt.Errorf("failed to create Dockerfile: %w", err)
 		}
@@ -184,7 +214,9 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 	return nil
 }
 
-type FinalizeProjectStep struct{}
+type FinalizeProjectStep struct {
+	fs *fs.FileSystem
+}
 
 func (s *FinalizeProjectStep) Execute(state *State) error {
 	state.Logger.Debug().Msg("Finalizing project.")
@@ -192,7 +224,7 @@ func (s *FinalizeProjectStep) Execute(state *State) error {
 
 	zipPath := filepath.Join(".", projectName+".zip")
 	state.Logger.Printf("Writing project to zip file: %s\n", zipPath)
-	if err := state.FileSystem.WriteToZip(zipPath); err != nil {
+	if err := s.fs.WriteToZip(zipPath); err != nil {
 		state.Logger.Error().Err(err).Msg("Failed to write project to zip file")
 		return fmt.Errorf("failed to write project to zip file: %w", err)
 	}

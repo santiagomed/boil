@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/santiagomed/boil/pkg/utils"
 	"github.com/spf13/afero"
@@ -86,93 +87,6 @@ func (fs *FileSystem) WriteFile(path string, content string) error {
 	return nil
 }
 
-// CopyFile copies a file from src to dst
-func (fs *FileSystem) CopyFile(src, dst string) error {
-	sourceFile, err := fs.Fs.Open(src)
-	if err != nil {
-		return fmt.Errorf("error opening source file: %w", err)
-	}
-	defer sourceFile.Close()
-
-	dstFile, err := fs.Fs.Create(dst)
-	if err != nil {
-		return fmt.Errorf("error creating destination file: %w", err)
-	}
-	defer dstFile.Close()
-
-	_, err = io.Copy(dstFile, sourceFile)
-	if err != nil {
-		return fmt.Errorf("error copying file: %w", err)
-	}
-
-	return nil
-}
-
-// CopyDir recursively copies a directory tree
-func (fs *FileSystem) CopyDir(src string, dst string) error {
-	src = filepath.Clean(src)
-	dst = filepath.Clean(dst)
-
-	si, err := fs.Fs.Stat(src)
-	if err != nil {
-		return err
-	}
-	if !si.IsDir() {
-		return fmt.Errorf("source is not a directory")
-	}
-
-	err = fs.Fs.MkdirAll(dst, si.Mode())
-	if err != nil {
-		return err
-	}
-
-	entries, err := afero.ReadDir(fs.Fs, src)
-	if err != nil {
-		return err
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if entry.IsDir() {
-			err = fs.CopyDir(srcPath, dstPath)
-			if err != nil {
-				return err
-			}
-		} else {
-			err = fs.CopyFile(srcPath, dstPath)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-// EnsureDir ensures that the specified directory exists
-func (fs *FileSystem) EnsureDir(dir string) error {
-	return fs.Fs.MkdirAll(dir, 0755)
-}
-
-// MoveDir moves the contents of a directory to another location
-func (fs *FileSystem) MoveDir(src, dst string) error {
-	if err := fs.CopyDir(src, dst); err != nil {
-		return fmt.Errorf("error copying directory contents: %w", err)
-	}
-	if err := fs.Fs.RemoveAll(src); err != nil {
-		return fmt.Errorf("error removing source directory: %w", err)
-	}
-	return nil
-}
-
-// FileExists checks if a file exists
-func (fs *FileSystem) FileExists(path string) bool {
-	_, err := fs.Fs.Stat(path)
-	return err == nil
-}
-
 // IsDir checks if a path is a directory
 func (fs *FileSystem) IsDir(path string) bool {
 	info, err := fs.Fs.Stat(path)
@@ -195,7 +109,7 @@ func (fs *FileSystem) WriteToZip(zipPath string) error {
 	log.Debug().Msgf("Starting to write zip file: %s", zipPath)
 
 	// List all files before zipping
-	if err := fs.ListFiles(); err != nil {
+	if _, err := fs.ListFiles(); err != nil {
 		log.Error().Msgf("Error listing files before zip creation: %v", err)
 	}
 
@@ -278,10 +192,12 @@ func (fs *FileSystem) WriteToZip(zipPath string) error {
 	return nil
 }
 
-// ListFiles lists all files in the filesystem
-func (fs *FileSystem) ListFiles() error {
+// ListFiles lists all files in the filesystem and returns a map representing the directory structure
+func (fs *FileSystem) ListFiles() (map[string]interface{}, error) {
 	log := utils.GetLogger()
+	structure := make(map[string]interface{})
 	fileCount := 0
+
 	err := afero.Walk(fs.Fs, ".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			log.Error().Msgf("Error walking path %s: %v", path, err)
@@ -292,14 +208,28 @@ func (fs *FileSystem) ListFiles() error {
 			return nil
 		}
 
-		if info.IsDir() {
-			log.Debug().Msgf("Directory: %s", path)
-		} else {
-			fileCount++
-			log.Debug().Msgf("File: %s", path)
+		parts := strings.Split(path, string(os.PathSeparator))
+		current := structure
+		for i, part := range parts {
+			if i == len(parts)-1 {
+				if info.IsDir() {
+					current[part] = make(map[string]interface{})
+					log.Debug().Msgf("Directory: %s", path)
+				} else {
+					current[part] = nil // Use nil to represent files
+					fileCount++
+					log.Debug().Msgf("File: %s", path)
+				}
+			} else {
+				if _, exists := current[part]; !exists {
+					current[part] = make(map[string]interface{})
+				}
+				current = current[part].(map[string]interface{})
+			}
 		}
 		return nil
 	})
+
 	log.Debug().Msgf("Total files found: %d", fileCount)
-	return err
+	return structure, err
 }

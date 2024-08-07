@@ -1,6 +1,9 @@
 package utils
 
 import (
+	"archive/zip"
+	"io"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -76,4 +79,55 @@ func TruncateString(s string, maxLength int) string {
 		return s
 	}
 	return s[:maxLength-3] + "..."
+}
+
+// Unzip extracts a zip file to the specified destination
+func Unzip(zipFileName string, destination string) error {
+	if destination == "" {
+		destination = "."
+	}
+
+	// if destination doesn't exist, create it
+	if _, err := os.Stat(destination); os.IsNotExist(err) {
+		if err := os.MkdirAll(destination, os.ModePerm); err != nil {
+			return err
+		}
+	}
+
+	zipReader, err := zip.OpenReader(zipFileName)
+	if err != nil {
+		return err
+	}
+	defer zipReader.Close()
+
+	for _, file := range zipReader.File {
+		filePath := filepath.Join(destination, file.Name)
+
+		if file.FileInfo().IsDir() {
+			os.MkdirAll(filePath, os.ModePerm)
+			continue
+		}
+
+		if err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm); err != nil {
+			return err
+		}
+
+		dstFile, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+		if err != nil {
+			return err
+		}
+		defer dstFile.Close()
+
+		srcFile, err := file.Open()
+		if err != nil {
+			return err
+		}
+		defer srcFile.Close()
+
+		if _, err := io.Copy(dstFile, srcFile); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

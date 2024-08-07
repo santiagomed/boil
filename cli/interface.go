@@ -1,13 +1,15 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/santiagomed/boil/pkg/config"
 	"github.com/santiagomed/boil/pkg/core"
-	"github.com/santiagomed/boil/pkg/llm"
 	"github.com/santiagomed/boil/pkg/utils"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -70,6 +72,8 @@ type model struct {
 	currentQuestion int
 	completedSteps  []core.StepType
 	engine          *core.Engine
+	engineCtx       context.Context
+	engineCancel    context.CancelFunc
 	answers         []string
 	publisher       *CliStepPublisher
 	logger          *zerolog.Logger
@@ -109,19 +113,16 @@ func initialModel(prompt string, f flags) (model, error) {
 	}
 
 	projectDesc := utils.SanitizeInput(prompt)
-	llmCfg := llm.LlmConfig{
-		OpenAIAPIKey: cfg.OpenAIAPIKey,
-		ModelName:    cfg.ModelName,
-		ProjectName:  cfg.ProjectName,
-	}
-	llmClient, err := llm.NewClient(&llmCfg)
+
+	publisher := NewCliStepPublisher(logger)
+	engine, err := core.NewProjectEngine(cfg, publisher, logger, 1)
 	if err != nil {
 		return model{}, err
 	}
-	publisher := NewCliStepPublisher(logger)
-	engine := core.NewProjectEngine(cfg, llmClient, publisher, logger)
 
-	return model{
+	ctx, cancel := context.WithCancel(context.Background())
+
+	m := model{
 		textInput:       ti,
 		spinner:         s,
 		state:           Input,
@@ -129,9 +130,13 @@ func initialModel(prompt string, f flags) (model, error) {
 		projectDesc:     projectDesc,
 		config:          cfg,
 		engine:          engine,
+		engineCtx:       ctx,
+		engineCancel:    cancel,
 		publisher:       publisher,
 		currentQuestion: 0,
-	}, nil
+	}
+	engine.Start(ctx)
+	return m, nil
 }
 
 func (m model) Init() tea.Cmd {
@@ -240,11 +245,6 @@ func (m *model) handleQuestionAnswer(answer string) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(textinput.Blink, func() tea.Msg { return nil })
 }
 
-func (m *model) startProjectGeneration() tea.Cmd {
-	go m.engine.Generate(m.projectDesc)
-	return m.listenForNextStep
-}
-
 func (m *model) listenForNextStep() tea.Msg {
 	select {
 	case step := <-m.publisher.stepChan:
@@ -253,6 +253,23 @@ func (m *model) listenForNextStep() tea.Msg {
 		m.logger.Error().Err(err).Msg("Error received during project generation")
 		return err
 	}
+}
+
+func (m *model) startProjectGeneration() tea.Cmd {
+	resultChan := m.engine.AddRequest(m.projectDesc)
+	listenForError := func() tea.Msg {
+		select {
+		case err := <-resultChan:
+			if err != nil {
+				return err
+			}
+			return core.FinalizeProject
+		case <-time.After(3 * time.Minute):
+			m.logger.Error().Msg("Project generation timed out")
+			return errors.New("project generation timed out")
+		}
+	}
+	return tea.Batch(m.listenForNextStep, listenForError)
 }
 
 func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
@@ -267,9 +284,28 @@ func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
 
 func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
 	m.logger.Debug().Msg("Finalizing project")
+	projectName := m.config.ProjectName
+	zipFileName := fmt.Sprintf("%s.zip", projectName)
+	m.logger.Debug().Msgf("Unzipping file: %s", zipFileName)
+
+	err := utils.Unzip(zipFileName, projectName)
+	if err != nil {
+		m.logger.Error().Err(err).Msg("Failed to unzip project file")
+		return m, tea.Quit
+	}
+
+	m.logger.Debug().Msg("Project unzipped successfully")
+
+	err = os.Remove(zipFileName)
+	if err != nil {
+		m.logger.Error().Err(err).Msg("Failed to delete zip file")
+		return m, tea.Quit
+	}
+
+	m.logger.Debug().Msgf("Deleted zip file: %s", zipFileName)
 	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	projectName := nameStyle.Render(m.config.ProjectName)
-	finalMsg := fmt.Sprintf("Project generated in directory: %s", projectName)
+	outProjectName := nameStyle.Render(projectName)
+	finalMsg := fmt.Sprintf("Project generated in directory: %s", outProjectName)
 	return m, tea.Printf("%s", finalMsg)
 }
 
@@ -386,6 +422,11 @@ func (m *model) updateConfig() {
 	m.config.Dockerfile = m.answers[3] == "y"
 }
 
+func (m *model) Shutdown() {
+	m.engineCancel()                   // Cancel the engine context
+	m.engine.Shutdown(5 * time.Second) // Give 5 seconds for graceful shutdown
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "boil",
 	Short: "Boil is a CLI tool for generating project boilerplate files",
@@ -409,6 +450,8 @@ var rootCmd = &cobra.Command{
 			fmt.Printf("Error running program: %v\n", err)
 			os.Exit(1)
 		}
+
+		model.Shutdown()
 	},
 }
 

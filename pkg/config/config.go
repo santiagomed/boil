@@ -11,7 +11,6 @@ import (
 // Config stores all configuration of the application.
 type Config struct {
 	ProjectName  string `mapstructure:"project_name"`
-	TempDir      string `mapstructure:"temp_dir"`
 	OpenAIAPIKey string `mapstructure:"openai_api_key"`
 	ModelName    string `mapstructure:"model_name"`
 	GitRepo      bool   `mapstructure:"git_repo"`
@@ -24,12 +23,11 @@ type Config struct {
 func DefaultConfig() *Config {
 	return &Config{
 		ProjectName:  "my-project",
-		TempDir:      os.TempDir(),
 		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
 		ModelName:    "gpt-4o-mini",
-		GitRepo:      true,
-		GitIgnore:    true,
-		Readme:       true,
+		GitRepo:      false,
+		GitIgnore:    false,
+		Readme:       false,
 		Dockerfile:   false,
 	}
 }
