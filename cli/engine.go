@@ -24,9 +24,10 @@ type Engine struct {
 	workers      int
 	workerWG     sync.WaitGroup
 	shutdownChan chan struct{}
+	fs           *fs.FileSystem
 }
 
-func NewProjectEngine(pub core.StepPublisher, l logger.Logger, workers int) (*Engine, error) {
+func NewProjectEngine(pub core.StepPublisher, l logger.Logger, workers int, fs *fs.FileSystem) (*Engine, error) {
 	if l == nil {
 		l = logger.NewNullLogger()
 	}
@@ -36,6 +37,7 @@ func NewProjectEngine(pub core.StepPublisher, l logger.Logger, workers int) (*En
 		requests:     make(chan ExecutionRequest, 1000), // Buffered channel
 		workers:      workers,
 		shutdownChan: make(chan struct{}),
+		fs:           fs,
 	}, nil
 }
 
@@ -52,7 +54,6 @@ func (e *Engine) worker(ctx context.Context) {
 		select {
 		case req := <-e.requests:
 			r := req.Request
-			fs := fs.NewMemoryFileSystem()
 			llmCfg := llm.LlmConfig{
 				OpenAIAPIKey: r.OpenAIAPIKey,
 				ModelName:    r.ModelName,
@@ -64,7 +65,7 @@ func (e *Engine) worker(ctx context.Context) {
 				close(req.ResultChan)
 				continue
 			}
-			stepManager := core.NewDefaultStepManager(llm, fs)
+			stepManager := core.NewDefaultStepManager(llm, e.fs)
 			pipeline, err := core.NewPipeline(req.Request, llm, stepManager, e.pub, e.logger)
 			if err != nil {
 				req.ResultChan <- err

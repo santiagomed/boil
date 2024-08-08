@@ -99,6 +99,68 @@ func (fs *FileSystem) InitializeGitRepo() error {
 	return fs.Fs.MkdirAll(".git", 0755)
 }
 
+// CopyDir copies a directory from one file system to another
+func (fs *FileSystem) CopyDir(dstFS afero.Fs, srcPath, dstPath string) error {
+	// Check if the source path exists and is a directory
+	srcInfo, err := fs.Fs.Stat(srcPath)
+	if err != nil {
+		return fmt.Errorf("error accessing source path: %w", err)
+	}
+	if !srcInfo.IsDir() {
+		return fmt.Errorf("source path is not a directory")
+	}
+
+	// Create the destination directory
+	err = dstFS.MkdirAll(dstPath, srcInfo.Mode())
+	if err != nil {
+		return fmt.Errorf("error creating destination directory: %w", err)
+	}
+
+	// Walk through the source directory
+	return afero.Walk(fs.Fs, srcPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// Calculate the destination path
+		relPath, err := filepath.Rel(srcPath, path)
+		if err != nil {
+			return fmt.Errorf("error calculating relative path: %w", err)
+		}
+		dstItemPath := filepath.Join(dstPath, relPath)
+
+		if info.IsDir() {
+			// Create directory in destination
+			return dstFS.MkdirAll(dstItemPath, info.Mode())
+		} else {
+			// Copy file to destination
+			return copyFile(fs.Fs, dstFS, path, dstItemPath)
+		}
+	})
+}
+
+// copyFile is a helper function to copy a single file
+func copyFile(srcFS, dstFS afero.Fs, srcPath, dstPath string) error {
+	srcFile, err := srcFS.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("error opening source file: %w", err)
+	}
+	defer srcFile.Close()
+
+	dstFile, err := dstFS.Create(dstPath)
+	if err != nil {
+		return fmt.Errorf("error creating destination file: %w", err)
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	if err != nil {
+		return fmt.Errorf("error copying file contents: %w", err)
+	}
+
+	return nil
+}
+
 // WriteToZip writes the in-memory file system to a zip file
 func (fs *FileSystem) WriteToZip(zipPath string) error {
 	realFs := afero.NewOsFs()

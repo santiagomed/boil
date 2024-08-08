@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/santiagomed/boil/core"
+	"github.com/santiagomed/boil/fs"
 	"github.com/santiagomed/boil/logger"
 	"github.com/santiagomed/boil/utils"
 
@@ -17,6 +18,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/list"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -75,6 +77,7 @@ type model struct {
 	answers         []string
 	publisher       *CliStepPublisher
 	logger          logger.Logger
+	fs              *fs.FileSystem
 }
 
 type flags struct {
@@ -104,8 +107,9 @@ func initialModel(prompt string, f flags) (model, error) {
 
 	req.ProjectDescription = utils.SanitizeInput(prompt)
 
+	fs := fs.NewMemoryFileSystem()
 	publisher := NewCliStepPublisher(logger)
-	engine, err := NewProjectEngine(publisher, logger, 1)
+	engine, err := NewProjectEngine(publisher, logger, 1, fs)
 	if err != nil {
 		return model{}, err
 	}
@@ -118,6 +122,7 @@ func initialModel(prompt string, f flags) (model, error) {
 		state:           Input,
 		logger:          logger,
 		request:         req,
+		fs:              fs,
 		engine:          engine,
 		engineCtx:       ctx,
 		engineCancel:    cancel,
@@ -264,34 +269,23 @@ func (m *model) startProjectGeneration() tea.Cmd {
 func (m *model) handleStep(step core.StepType) (tea.Model, tea.Cmd) {
 	m.logger.Debug(fmt.Sprintf("Received step: %v", step))
 	m.completedSteps = append(m.completedSteps, step)
-	if step == core.FinalizeProject {
-		m.state = Finished
+	if step == core.Done {
 		return m.finalizeProject()
 	}
 	return m, tea.Batch(m.spinner.Tick, m.listenForNextStep)
 }
 
 func (m *model) finalizeProject() (tea.Model, tea.Cmd) {
-	m.logger.Debug("Finalizing project")
-	projectName := m.request.ProjectName
-	zipFileName := fmt.Sprintf("%s.zip", projectName)
-	m.logger.Debug(fmt.Sprintf("Unzipping file: %s", zipFileName))
+	m.logger.Info("Finalizing project.")
+	m.state = Finished
+	projectName := utils.FormatProjectName(m.request.ProjectName)
 
-	err := utils.Unzip(zipFileName, projectName)
+	err := m.engine.fs.CopyDir(afero.NewOsFs(), ".", projectName)
 	if err != nil {
-		m.logger.Error(fmt.Sprintf("Failed to unzip project file: %v", err))
+		m.logger.Error(fmt.Sprintf("Failed to copy project to disk: %v", err))
 		return m, tea.Quit
 	}
 
-	m.logger.Debug("Project unzipped successfully")
-
-	err = os.Remove(zipFileName)
-	if err != nil {
-		m.logger.Error(fmt.Sprintf("Failed to delete zip file: %v", err))
-		return m, tea.Quit
-	}
-
-	m.logger.Debug(fmt.Sprintf("Deleted zip file: %s", zipFileName))
 	nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 	outProjectName := nameStyle.Render(projectName)
 	finalMsg := fmt.Sprintf("Project generated in directory: %s", outProjectName)

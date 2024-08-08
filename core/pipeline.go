@@ -23,7 +23,7 @@ const (
 	DetermineFileOrder
 	GenerateFileContents
 	CreateOptionalComponents
-	FinalizeProject
+	Done
 )
 
 type State struct {

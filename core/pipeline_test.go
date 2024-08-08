@@ -181,7 +181,7 @@ func TestPipeline_Execute(t *testing.T) {
 		DetermineFileOrder,
 		GenerateFileContents,
 		CreateOptionalComponents,
-		FinalizeProject,
+		Done,
 	}
 	for _, expectedStep := range expectedSteps {
 		select {

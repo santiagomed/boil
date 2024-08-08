@@ -2,11 +2,9 @@ package core
 
 import (
 	"fmt"
-	"path/filepath"
 
 	"github.com/santiagomed/boil/fs"
 	"github.com/santiagomed/boil/llm"
-	"github.com/santiagomed/boil/utils"
 )
 
 type GenerateProjectDetailsStep struct {
@@ -180,21 +178,9 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 	return nil
 }
 
-type FinalizeProjectStep struct {
-	fs *fs.FileSystem
-}
+type DoneStep struct{}
 
-func (s *FinalizeProjectStep) Execute(state *State) error {
-	state.Logger.Info("Finalizing project.")
-	projectName := utils.FormatProjectName(state.Request.ProjectName)
-
-	zipPath := filepath.Join(".", projectName+".zip")
-	state.Logger.Info(fmt.Sprintf("Writing project to zip file: %s", zipPath))
-	if err := s.fs.WriteToZip(zipPath); err != nil {
-		state.Logger.Error(fmt.Sprintf("Failed to write project to zip file: %v", err))
-		return fmt.Errorf("failed to write project to zip file: %w", err)
-	}
-
+func (s *DoneStep) Execute(state *State) error {
 	state.Logger.Info("Project finalized successfully")
 	return nil
 }
@@ -219,7 +205,7 @@ func NewDefaultStepManager(llm llm.LLMClient, fs *fs.FileSystem) *DefaultStepMan
 			DetermineFileOrder:       &DetermineFileOrderStep{llm: llm},
 			GenerateFileContents:     &GenerateFileContentsStep{llm: llm, fs: fs},
 			CreateOptionalComponents: &CreateOptionalComponentsStep{llm: llm, fs: fs},
-			FinalizeProject:          &FinalizeProjectStep{fs: fs},
+			Done:                     &DoneStep{},
 		},
 		steps: []StepType{
 			GenerateProjectDetails,
@@ -229,7 +215,7 @@ func NewDefaultStepManager(llm llm.LLMClient, fs *fs.FileSystem) *DefaultStepMan
 			DetermineFileOrder,
 			GenerateFileContents,
 			CreateOptionalComponents,
-			FinalizeProject,
+			Done,
 		},
 	}
 }
