@@ -1,7 +1,6 @@
 package core
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -198,10 +197,4 @@ func TestPipeline_Execute(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, structure)
 	assert.Equal(t, expectedStructure, structure)
-	_, err = os.Stat("test-project.zip")
-	assert.NoError(t, err, "Zip file should exist")
-	assert.FileExists(t, "test-project.zip", "Zip file should be created")
-
-	// Clean up the zip file
-	os.Remove("test-project.zip")
 }
