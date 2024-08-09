@@ -56,9 +56,11 @@ fi
 
 # Create and push tag if not skipped
 if [ "$SKIP_TAG" = false ]; then
+    export GITHUB_TOKEN=$(gh auth token)
     echo "Creating git tag $VERSION..."
     git tag -a "$VERSION" -m "Release $VERSION"
     git push origin "$VERSION"
+    goreleaser release --clean
 fi
 
 # Run goreleaser
