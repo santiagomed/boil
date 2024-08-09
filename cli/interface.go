@@ -103,13 +103,14 @@ func initialModel(prompt string, f flags) (model, error) {
 	req := core.DefaultRequest()
 	if f.name != "" {
 		req.ProjectName = f.name
+		req.ID = f.name
 	}
 
 	req.ProjectDescription = utils.SanitizeInput(prompt)
 
 	fs := fs.NewMemoryFileSystem()
 	publisher := NewCliStepPublisher(logger)
-	engine, err := NewProjectEngine(publisher, logger, 1, fs)
+	engine, err := NewProjectEngine(publisher, logger, 1, fs, "http://localhost:8000")
 	if err != nil {
 		return model{}, err
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/santiagomed/boil/fs"
+	"github.com/santiagomed/boil/logger"
 
 	tellm "github.com/santiagomed/tellm/sdk"
 	"github.com/sashabaranov/go-openai"
@@ -16,7 +17,8 @@ import (
 type LlmConfig struct {
 	OpenAIAPIKey string
 	ModelName    string
-	ProjectName  string
+	BatchID      string
+	TellmURL     string
 }
 
 // Client represents an LLM client
@@ -24,19 +26,21 @@ type Client struct {
 	openAIClient *openai.Client
 	config       *LlmConfig
 	tellmClient  *tellm.Client
+	logger       logger.Logger
 }
 
 // NewClient creates a new LLM client
-func NewClient(cfg *LlmConfig) (*Client, error) {
+func NewClient(cfg *LlmConfig, logger logger.Logger) (*Client, error) {
 	if cfg.OpenAIAPIKey == "" {
 		return nil, errors.New("OpenAI API key is required")
 	}
 	openAIClient := openai.NewClient(cfg.OpenAIAPIKey)
-	tellmClient := tellm.NewClient("http://localhost:8080")
+	tellmClient := tellm.NewClient(cfg.TellmURL)
 	return &Client{
 		openAIClient: openAIClient,
 		config:       cfg,
 		tellmClient:  tellmClient,
+		logger:       logger,
 	}, nil
 }
 
@@ -174,9 +178,12 @@ func (c *Client) getCompletion(prompt string, responseType openai.ChatCompletion
 	if len(resp.Choices) == 0 {
 		return "", fmt.Errorf("no choices returned from OpenAI")
 	}
-
+	usage := resp.Usage
 	res := resp.Choices[0].Message.Content
-	c.tellmClient.Log(c.config.ProjectName, prompt, res)
+	err = c.tellmClient.Log(c.config.BatchID, prompt, res, c.config.ModelName, usage.PromptTokens, usage.CompletionTokens)
+	if err != nil {
+		c.logger.WithField("warning", err).Warn("failed to log to tellm")
+	}
 
 	return res, nil
 }

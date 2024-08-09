@@ -25,9 +25,10 @@ type Engine struct {
 	workerWG     sync.WaitGroup
 	shutdownChan chan struct{}
 	fs           *fs.FileSystem
+	tellmURL     string
 }
 
-func NewProjectEngine(pub core.StepPublisher, l logger.Logger, workers int, fs *fs.FileSystem) (*Engine, error) {
+func NewProjectEngine(pub core.StepPublisher, l logger.Logger, workers int, fs *fs.FileSystem, tellmURL string) (*Engine, error) {
 	if l == nil {
 		l = logger.NewNullLogger()
 	}
@@ -38,6 +39,7 @@ func NewProjectEngine(pub core.StepPublisher, l logger.Logger, workers int, fs *
 		workers:      workers,
 		shutdownChan: make(chan struct{}),
 		fs:           fs,
+		tellmURL:     tellmURL,
 	}, nil
 }
 
@@ -57,9 +59,10 @@ func (e *Engine) worker(ctx context.Context) {
 			llmCfg := llm.LlmConfig{
 				OpenAIAPIKey: r.OpenAIAPIKey,
 				ModelName:    r.ModelName,
-				ProjectName:  r.ProjectName,
+				BatchID:      r.ID,
+				TellmURL:     e.tellmURL,
 			}
-			llm, err := llm.NewClient(&llmCfg)
+			llm, err := llm.NewClient(&llmCfg, e.logger)
 			if err != nil {
 				req.ResultChan <- err
 				close(req.ResultChan)

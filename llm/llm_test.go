@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/santiagomed/boil/fs"
+	"github.com/santiagomed/boil/logger"
 )
 
 type Cache struct {
@@ -51,9 +52,9 @@ func TestLlmSequential(t *testing.T) {
 	cfg := LlmConfig{
 		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
 		ModelName:    "gpt-4o-mini",
-		ProjectName:  "test-project",
+		BatchID:      "test-batch",
 	}
-	llmClient, err := NewClient(&cfg)
+	llmClient, err := NewClient(&cfg, logger.NewNullLogger())
 	if err != nil {
 		t.Fatalf("Error creating LLM client: %v", err)
 	}
