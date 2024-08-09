@@ -193,7 +193,7 @@ func TestPipeline_Execute(t *testing.T) {
 
 	mockLLM.AssertExpectations(t)
 
-	structure, err := memFS.ListFiles()
+	structure, err := memFS.ListFiles(".")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, structure)
 	assert.Equal(t, expectedStructure, structure)

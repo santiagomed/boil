@@ -2,6 +2,7 @@ package fs
 
 import (
 	"archive/zip"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -161,20 +162,13 @@ func copyFile(srcFS, dstFS afero.Fs, srcPath, dstPath string) error {
 	return nil
 }
 
-// WriteToZip writes the in-memory file system to a zip file
-func (fs *FileSystem) WriteToZip(zipPath string) error {
-	realFs := afero.NewOsFs()
-	zipFile, err := realFs.Create(zipPath)
-	if err != nil {
-		return fmt.Errorf("error creating zip file: %w", err)
-	}
-	defer zipFile.Close()
-
-	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close()
+// WriteToZip writes the in-memory file system to a zip and returns it as bytes
+func (fs *FileSystem) WriteToZip() ([]byte, error) {
+	var buf bytes.Buffer
+	zipWriter := zip.NewWriter(&buf)
 
 	fileCount := 0
-	err = afero.Walk(fs.Fs, ".", func(path string, info os.FileInfo, err error) error {
+	err := afero.Walk(fs.Fs, ".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -216,32 +210,32 @@ func (fs *FileSystem) WriteToZip(zipPath string) error {
 	})
 
 	if err != nil {
-		return fmt.Errorf("error walking file system: %w", err)
+		return nil, fmt.Errorf("error walking file system: %w", err)
 	}
 
 	if fileCount == 0 {
-		return fmt.Errorf("no files to zip")
+		return nil, fmt.Errorf("no files to zip")
 	}
 
 	err = zipWriter.Close()
 	if err != nil {
-		return fmt.Errorf("error closing zip writer: %w", err)
+		return nil, fmt.Errorf("error closing zip writer: %w", err)
 	}
 
-	return nil
+	return buf.Bytes(), nil
 }
 
 // ListFiles lists all files in the filesystem and returns a map representing the directory structure
-func (fs *FileSystem) ListFiles() (map[string]interface{}, error) {
+func (fs *FileSystem) ListFiles(filepath string) (map[string]interface{}, error) {
 	structure := make(map[string]interface{})
 	fileCount := 0
 
-	err := afero.Walk(fs.Fs, ".", func(path string, info os.FileInfo, err error) error {
+	err := afero.Walk(fs.Fs, filepath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		// Skip root directory
-		if path == "." {
+		if path == filepath {
 			return nil
 		}
 
