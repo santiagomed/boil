@@ -75,7 +75,7 @@ func (e *Engine) worker(ctx context.Context) {
 				close(req.ResultChan)
 				continue
 			}
-			err = pipeline.Execute()
+			err = pipeline.Execute(ctx)
 			req.ResultChan <- err
 			close(req.ResultChan)
 		case <-ctx.Done():

@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -166,7 +167,7 @@ func TestPipeline_Execute(t *testing.T) {
 
 	// Execute the pipeline in a goroutine
 	go func() {
-		err := pipeline.Execute()
+		err := pipeline.Execute(context.Background())
 		assert.NoError(t, err)
 		close(realPublisher.stepChan)
 	}()
@@ -197,4 +198,88 @@ func TestPipeline_Execute(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotEmpty(t, structure)
 	assert.Equal(t, expectedStructure, structure)
+}
+
+func TestPipeline_Cancel(t *testing.T) {
+	mockLLM := new(MockLLM)
+
+	mockLLM.On("GenerateProjectDetails", mock.Anything).Return("Project details", nil)
+	mockLLM.On("GenerateFileTree", mock.Anything).Return("File tree", nil)
+	mockLLM.On("GenerateFileOperations", mock.Anything, mock.Anything).Return([]fs.FileOperation{}, nil)
+	mockLLM.On("DetermineFileOrder", mock.Anything).Return([]string{"file1", "file2"}, nil)
+	mockLLM.On("GenerateFileContent", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("File content", nil)
+	mockLLM.On("GenerateReadmeContent", mock.Anything).Return("README content", nil)
+	mockLLM.On("GenerateGitignoreContent", mock.Anything).Return("Gitignore content", nil)
+	mockLLM.On("GenerateDockerfileContent", mock.Anything).Return("Dockerfile content", nil)
+
+	r := &Request{
+		ProjectDescription: "Test project description",
+		ProjectName:        "test-project",
+		GitRepo:            true,
+		GitIgnore:          true,
+		Dockerfile:         true,
+		Readme:             true,
+		OpenAIAPIKey:       "test-key",
+		ModelName:          "test-model",
+	}
+
+	memFS := fs.NewMemoryFileSystem()
+	realPublisher := NewPublisher()
+
+	pipeline := &Pipeline{
+		stepManager: NewDefaultStepManager(mockLLM, memFS),
+		state: &State{
+			Request:       r,
+			PreviousFiles: make(map[string]string),
+			Logger:        logger.NewNullLogger(),
+		},
+		publisher: realPublisher,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stepChan := make(chan StepType, 8)
+	go func() {
+		for step := range realPublisher.stepChan {
+			stepChan <- step
+		}
+	}()
+
+	go func() {
+		err := pipeline.Execute(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "context canceled")
+		close(realPublisher.stepChan)
+	}()
+
+	time.Sleep(3 * time.Second)
+	cancel()
+
+	time.Sleep(500 * time.Millisecond) // Allow time for cancellation to propagate
+
+	completedSteps := []StepType{}
+	for {
+		select {
+		case step := <-stepChan:
+			completedSteps = append(completedSteps, step)
+		default:
+			goto DoneCollecting
+		}
+	}
+DoneCollecting:
+
+	assert.Equal(t, 3, len(completedSteps), "3 steps should have completed")
+
+	for i, step := range completedSteps {
+		assert.Equal(t, StepType(i), step, "Steps should be in order")
+	}
+
+	mockLLM.AssertNumberOfCalls(t, "GenerateProjectDetails", 1)
+	mockLLM.AssertNumberOfCalls(t, "GenerateFileTree", 1)
+	mockLLM.AssertNumberOfCalls(t, "GenerateFileOperations", 1)
+	mockLLM.AssertNumberOfCalls(t, "DetermineFileOrder", 0)
+	mockLLM.AssertNumberOfCalls(t, "GenerateFileContent", 0)
+	mockLLM.AssertNumberOfCalls(t, "GenerateReadmeContent", 0)
+	mockLLM.AssertNumberOfCalls(t, "GenerateGitignoreContent", 0)
+	mockLLM.AssertNumberOfCalls(t, "GenerateDockerfileContent", 0)
 }
