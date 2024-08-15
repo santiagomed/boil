@@ -11,18 +11,49 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+type progressMsg float64
+
+type progressErrMsg struct{ err error }
+
+type downloadCompleteMsg struct{}
 
 type getFlags struct {
 	token string
 }
 
+const (
+	downloading = iota
+	prompting
+)
+
 type getCmdModel struct {
-	pw       *progressWriter
-	progress progress.Model
-	err      error
+	pw        *progressWriter
+	progress  progress.Model
+	path      string
+	textinput textinput.Model
+	state     int
+	err       error
+}
+
+func newGetCmdModel(pw *progressWriter, path string) getCmdModel {
+	textinput := textinput.New()
+	textinput.Placeholder = "my-boil-project"
+	textinput.Focus()
+	textinput.CharLimit = 156
+	textinput.Width = 20
+
+	return getCmdModel{
+		pw:        pw,
+		progress:  progress.New(progress.WithGradient("#FFBA08", "#F48C06")),
+		textinput: textinput,
+		path:      path,
+		state:     downloading,
+	}
 }
 
 func (m getCmdModel) Init() tea.Cmd {
@@ -30,10 +61,18 @@ func (m getCmdModel) Init() tea.Cmd {
 }
 
 func (m getCmdModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		return m, tea.Quit
-
+		if msg.Type == tea.KeyEnter {
+			name := m.textinput.Value()
+			if name == "" {
+				return m.handleSaveProject("my-boil-project")
+			}
+			return m.handleSaveProject(name)
+		} else if msg.Type == tea.KeyEscape || msg.Type == tea.KeyCtrlC {
+			return m, tea.Quit
+		}
 	case tea.WindowSizeMsg:
 		m.progress.Width = msg.Width - padding*2 - 4
 		if m.progress.Width > maxWidth {
@@ -49,26 +88,33 @@ func (m getCmdModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmds []tea.Cmd
 
 		if msg >= 1.0 {
-			cmds = append(cmds, tea.Sequence(finalPause(), tea.Quit))
+			cmds = append(cmds, tea.Sequence(finalPause(), func() tea.Msg {
+				return downloadCompleteMsg{}
+			}))
 		}
 
 		cmds = append(cmds, m.progress.SetPercent(float64(msg)))
 		return m, tea.Batch(cmds...)
 
-	// FrameMsg is sent when the progress bar wants to animate itself
 	case progress.FrameMsg:
 		progressModel, cmd := m.progress.Update(msg)
 		m.progress = progressModel.(progress.Model)
 		return m, cmd
-
-	default:
-		return m, nil
+	case downloadCompleteMsg:
+		m.state = prompting
+		return m, textinput.Blink
 	}
+	var cmd tea.Cmd
+	m.textinput, cmd = m.textinput.Update(msg)
+	return m, cmd
 }
 
 func (m getCmdModel) View() string {
 	if m.err != nil {
 		return fmt.Sprintf("Error: %v", m.err)
+	}
+	if m.state == prompting {
+		return fmt.Sprintf("\nEnter project name: %s", m.textinput.View())
 	}
 	pad := strings.Repeat(" ", padding)
 	return "\n" +
@@ -80,6 +126,27 @@ func finalPause() tea.Cmd {
 	return tea.Tick(time.Millisecond*750, func(_ time.Time) tea.Msg {
 		return nil
 	})
+}
+
+func (m getCmdModel) handleSaveProject(name string) (tea.Model, tea.Cmd) {
+	errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFBA08"))
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Println(errorStyle.Render(fmt.Sprintf("Error getting current working directory: %v", err)))
+		m.err = err
+		return m, tea.Quit
+	}
+	destDir := filepath.Join(cwd, name)
+	if err := unzip(m.path, destDir); err != nil {
+		fmt.Println(errorStyle.Render(fmt.Sprintf("Error unzipping file: %v", err)))
+		m.err = err
+		return m, tea.Quit
+	}
+	successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
+	successProject := successStyle.Render(name)
+	check := lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render("✓")
+	fmt.Printf("%s Project saved to directory %s\n", check, successProject)
+	return m, tea.Quit
 }
 
 func downloadFile(url, token string) (*http.Response, error) {
@@ -130,10 +197,6 @@ const (
 	padding  = 2
 	maxWidth = 80
 )
-
-type progressMsg float64
-
-type progressErrMsg struct{ err error }
 
 type progressWriter struct {
 	total      int

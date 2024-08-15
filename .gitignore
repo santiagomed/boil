@@ -7,6 +7,7 @@
 *.test
 *.out
 *.log
+*.o
 .env
 tmp/
 dist/

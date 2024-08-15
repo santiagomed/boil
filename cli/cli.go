@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
@@ -85,10 +84,7 @@ var getCmd = &cobra.Command{
 			},
 		}
 
-		m := getCmdModel{
-			pw:       pw,
-			progress: progress.New(progress.WithGradient("#FFBA08", "#F48C06")),
-		}
+		m := newGetCmdModel(pw, path)
 
 		p = tea.NewProgram(m)
 
