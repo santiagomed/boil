@@ -53,7 +53,7 @@ var getCmd = &cobra.Command{
 		}
 		var p *tea.Program
 		errorStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#FFBA08"))
-		url := "http://localhost:8080/project/download"
+		url := "https://api.boil.sh/project/download"
 		resp, err := downloadFile(url, flags.token)
 		if err != nil {
 			fmt.Printf("Error downloading file: %v\n", errorStyle.Render(err.Error()))
