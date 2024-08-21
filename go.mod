@@ -6,7 +6,7 @@ require (
 	github.com/charmbracelet/bubbles v0.18.0
 	github.com/charmbracelet/bubbletea v0.26.6
 	github.com/rs/zerolog v1.33.0
-	github.com/santiagomed/tellm v0.1.2
+	github.com/santiagomed/tellm v0.1.3
 	github.com/sashabaranov/go-openai v1.26.3
 	github.com/spf13/afero v1.11.0
 	github.com/stretchr/testify v1.9.0
