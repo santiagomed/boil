@@ -67,7 +67,6 @@ func newGenerateModel(f genFlags) (generateCmdModel, error) {
 	req := core.DefaultRequest()
 	if f.name != "" {
 		req.ProjectName = f.name
-		req.ID = f.name
 	}
 
 	fs := fs.NewMemoryFileSystem()

@@ -4,7 +4,6 @@ import "os"
 
 // Request indicates the user's request for a new project.
 type Request struct {
-	ID                 string `mapstructure:"id"`
 	ProjectDescription string `mapstructure:"project_description"`
 	ProjectName        string `mapstructure:"project_name"`
 	GitRepo            bool   `mapstructure:"git_repo"`

@@ -59,7 +59,7 @@ func (e *Engine) worker(ctx context.Context) {
 			llmCfg := llm.LlmConfig{
 				OpenAIAPIKey: r.OpenAIAPIKey,
 				ModelName:    r.ModelName,
-				BatchID:      r.ID,
+				BatchID:      r.ProjectName,
 				TellmURL:     e.tellmURL,
 			}
 			llm, err := llm.NewClient(&llmCfg, e.logger)
