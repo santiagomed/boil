@@ -43,7 +43,7 @@ type Pipeline struct {
 	publisher   StepPublisher
 }
 
-func NewPipeline(r *Request, llm llm.LLMClient, sm StepManager, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
+func NewPipeline(r *Request, llm llm.LlmClient, sm StepManager, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
 	return &Pipeline{
 		state: &State{
 			Request:       r,

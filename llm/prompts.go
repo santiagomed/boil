@@ -168,19 +168,19 @@ func getFileOrderPrompt(fileTree string) string {
 
 %s
 
-Provide an ordered list of files to be created, considering the following criteria:
-1. Dependencies: Files that are required by other files should be created first.
-2. Configuration: Config files should generally be created early in the process.
-3. Core structure: Create base directories before files within them.
+Provide an ordered list of files for which to generate content, considering the following criteria:
+1. Dependencies: Files that are required by other files should have their content generated first.
+2. Configuration: Config files should generally have their content generated early in the process.
+3. Core structure: Consider the logical structure of the project when ordering content generation.
 4. Logical progression: Follow a natural development flow (e.g., main application file after its imports).
-5. Testing: Test files typically come after the files they are testing.
+5. Testing: Test files typically should have their content generated after the files they are testing.
 
 Rules:
 - Include ALL files from the given file tree, even if they might be auto-generated later.
 - Use forward slashes (/) for path separators, regardless of the operating system.
-- Include directories only if they are empty in the final structure.
+- Do not include empty directories.
 - File paths should be relative to the project root.
-- The order should reflect a practical sequence for setting up the project from scratch.
+- The order should reflect a practical sequence for generating content for the project from scratch.
 
 Return your response as a JSON object with a single key named "files", whose value is an array of file paths. Each file path should be a string. The JSON must be valid and directly parsable. Do not include any explanations, comments, or extra whitespace. For example:
 

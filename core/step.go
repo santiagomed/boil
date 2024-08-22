@@ -8,12 +8,12 @@ import (
 )
 
 type GenerateProjectDetailsStep struct {
-	llm llm.LLMClient
+	llm llm.LlmClient
 }
 
 func (s *GenerateProjectDetailsStep) Execute(state *State) error {
 	state.Logger.Info("Generating project details.")
-	details, err := s.llm.GenerateProjectDetails(state.Request.ProjectDescription)
+	details, err := llm.GenerateProjectDetails(s.llm, state.Request.ProjectDescription)
 	if err != nil {
 		state.Logger.Error(fmt.Sprintf("Failed to generate project details: %v", err))
 		return fmt.Errorf("failed to generate project details: %w", err)
@@ -24,12 +24,12 @@ func (s *GenerateProjectDetailsStep) Execute(state *State) error {
 }
 
 type GenerateFileTreeStep struct {
-	llm llm.LLMClient
+	llm llm.LlmClient
 }
 
 func (s *GenerateFileTreeStep) Execute(state *State) error {
 	state.Logger.Info("Generating file tree.")
-	fileTree, err := s.llm.GenerateFileTree(state.ProjectDetails)
+	fileTree, err := llm.GenerateFileTree(s.llm, state.ProjectDetails)
 	if err != nil {
 		state.Logger.Error(fmt.Sprintf("Failed to generate file tree: %v", err))
 		return fmt.Errorf("failed to generate file tree: %w", err)
@@ -40,12 +40,12 @@ func (s *GenerateFileTreeStep) Execute(state *State) error {
 }
 
 type GenerateFileOperationsStep struct {
-	llm llm.LLMClient
+	llm llm.LlmClient
 }
 
 func (s *GenerateFileOperationsStep) Execute(state *State) error {
 	state.Logger.Info("Generating file operations.")
-	operations, err := s.llm.GenerateFileOperations(state.ProjectDetails, state.FileTree)
+	operations, err := llm.GenerateFileOperations(s.llm, state.ProjectDetails, state.FileTree)
 	if err != nil {
 		state.Logger.Error(fmt.Sprintf("Failed to generate file operations: %v", err))
 		return fmt.Errorf("failed to generate file operations: %w", err)
@@ -71,12 +71,12 @@ func (s *ExecuteFileOperationsStep) Execute(state *State) error {
 }
 
 type DetermineFileOrderStep struct {
-	llm llm.LLMClient
+	llm llm.LlmClient
 }
 
 func (s *DetermineFileOrderStep) Execute(state *State) error {
 	state.Logger.Info("Determining file creation order.")
-	order, err := s.llm.DetermineFileOrder(state.FileTree)
+	order, err := llm.DetermineFileOrder(s.llm, state.FileTree)
 	if err != nil {
 		state.Logger.Error(fmt.Sprintf("Failed to determine file creation order: %v", err))
 		return fmt.Errorf("failed to determine file creation order: %w", err)
@@ -87,7 +87,7 @@ func (s *DetermineFileOrderStep) Execute(state *State) error {
 }
 
 type GenerateFileContentsStep struct {
-	llm llm.LLMClient
+	llm llm.LlmClient
 	fs  *fs.FileSystem
 }
 
@@ -98,7 +98,7 @@ func (s *GenerateFileContentsStep) Execute(state *State) error {
 			continue
 		}
 		state.Logger.Info(fmt.Sprintf("Generating content for file %s.", file))
-		content, err := s.llm.GenerateFileContent(file, state.ProjectDetails, state.FileTree, state.PreviousFiles)
+		content, err := llm.GenerateFileContent(s.llm, file, state.ProjectDetails, state.FileTree, state.PreviousFiles)
 		if err != nil {
 			state.Logger.Error(fmt.Sprintf("Failed to generate content for file %s: %v", file, err))
 			return fmt.Errorf("failed to generate content for file %s: %w", file, err)
@@ -116,7 +116,7 @@ func (s *GenerateFileContentsStep) Execute(state *State) error {
 }
 
 type CreateOptionalComponentsStep struct {
-	llm llm.LLMClient
+	llm llm.LlmClient
 	fs  *fs.FileSystem
 }
 
@@ -134,7 +134,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Request.GitIgnore {
 		state.Logger.Info("Creating .gitignore file.")
-		gitignore, err := s.llm.GenerateGitignoreContent(state.ProjectDetails)
+		gitignore, err := llm.GenerateGitignoreContent(s.llm, state.ProjectDetails)
 		if err != nil {
 			state.Logger.Error(fmt.Sprintf("Failed to create .gitignore file: %v", err))
 			return fmt.Errorf("failed to create .gitignore file: %w", err)
@@ -148,7 +148,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Request.Readme {
 		state.Logger.Info("Generating README.md.")
-		readme, err := s.llm.GenerateReadmeContent(state.ProjectDetails)
+		readme, err := llm.GenerateReadmeContent(s.llm, state.ProjectDetails)
 		if err != nil {
 			state.Logger.Error(fmt.Sprintf("Failed to generate README: %v", err))
 			return fmt.Errorf("failed to generate README: %w", err)
@@ -162,7 +162,7 @@ func (s *CreateOptionalComponentsStep) Execute(state *State) error {
 
 	if state.Request.Dockerfile {
 		state.Logger.Info("Generating Dockerfile.")
-		dockerfile, err := s.llm.GenerateDockerfileContent(state.ProjectDetails)
+		dockerfile, err := llm.GenerateDockerfileContent(s.llm, state.ProjectDetails)
 		if err != nil {
 			state.Logger.Error(fmt.Sprintf("Failed to generate Dockerfile: %v", err))
 			return fmt.Errorf("failed to generate Dockerfile: %w", err)
@@ -195,7 +195,7 @@ type DefaultStepManager struct {
 	stepMap map[StepType]Step
 }
 
-func NewDefaultStepManager(llm llm.LLMClient, fs *fs.FileSystem) *DefaultStepManager {
+func NewDefaultStepManager(llm llm.LlmClient, fs *fs.FileSystem) *DefaultStepManager {
 	return &DefaultStepManager{
 		stepMap: map[StepType]Step{
 			GenerateProjectDetails:   &GenerateProjectDetailsStep{llm: llm},

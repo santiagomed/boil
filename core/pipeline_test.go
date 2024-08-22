@@ -16,51 +16,9 @@ type MockLLM struct {
 	mock.Mock
 }
 
-func (m *MockLLM) GenerateProjectDetails(projectDesc string) (string, error) {
+func (m *MockLLM) GetCompletion(prompt, responseType string) (string, error) {
 	time.Sleep(1 * time.Second)
-	args := m.Called(projectDesc)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockLLM) GenerateFileTree(projectDetails string) (string, error) {
-	time.Sleep(1 * time.Second)
-	args := m.Called(projectDetails)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockLLM) GenerateFileOperations(projectDetails, fileTree string) ([]fs.FileOperation, error) {
-	time.Sleep(1 * time.Second)
-	args := m.Called(projectDetails, fileTree)
-	return args.Get(0).([]fs.FileOperation), args.Error(1)
-}
-
-func (m *MockLLM) DetermineFileOrder(fileTree string) ([]string, error) {
-	time.Sleep(1 * time.Second)
-	args := m.Called(fileTree)
-	return args.Get(0).([]string), args.Error(1)
-}
-
-func (m *MockLLM) GenerateFileContent(fileName, projectDetails, fileTree string, previousFiles map[string]string) (string, error) {
-	time.Sleep(1 * time.Second)
-	args := m.Called(fileName, projectDetails, fileTree, previousFiles)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockLLM) GenerateReadmeContent(projectDetails string) (string, error) {
-	time.Sleep(1 * time.Second)
-	args := m.Called(projectDetails)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockLLM) GenerateGitignoreContent(projectDetails string) (string, error) {
-	time.Sleep(1 * time.Second)
-	args := m.Called(projectDetails)
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockLLM) GenerateDockerfileContent(projectDetails string) (string, error) {
-	time.Sleep(1 * time.Second)
-	args := m.Called(projectDetails)
+	args := m.Called(prompt, responseType)
 	return args.String(0), args.Error(1)
 }
 
@@ -87,18 +45,36 @@ func (p *Publisher) Error(step StepType, err error) {
 func TestPipeline_Execute(t *testing.T) {
 	mockLLM := new(MockLLM)
 
-	var expectedFileOperations = []fs.FileOperation{
-		{Operation: "CREATE_DIR", Path: "src"},
-		{Operation: "CREATE_DIR", Path: "src/config"},
-		{Operation: "CREATE_DIR", Path: "src/utils"},
-		{Operation: "CREATE_DIR", Path: "test"},
-		{Operation: "CREATE_FILE", Path: "package.json"},
-		{Operation: "CREATE_FILE", Path: "src/index.js"},
-		{Operation: "CREATE_FILE", Path: "src/config/config.js"},
-		{Operation: "CREATE_FILE", Path: "src/utils/helpers.js"},
-		{Operation: "CREATE_FILE", Path: "test/index.test.js"},
-		{Operation: "CREATE_FILE", Path: ".env.example"},
-	}
+	var expectedFileOperations = `
+	{
+		"operations": [
+			{"operation": "CREATE_DIR", "path": "src"},
+			{"operation": "CREATE_DIR", "path": "src/config"},
+			{"operation": "CREATE_DIR", "path": "src/utils"},
+			{"operation": "CREATE_DIR", "path": "test"},
+			{"operation": "CREATE_FILE", "path": "package.json"},
+			{"operation": "CREATE_FILE", "path": "src/index.js"},
+			{"operation": "CREATE_FILE", "path": "src/config/config.js"},
+			{"operation": "CREATE_FILE", "path": "src/utils/helpers.js"},
+			{"operation": "CREATE_FILE", "path": "test/index.test.js"},
+			{"operation": "CREATE_FILE", "path": ".env.example"}
+		]
+	}`
+
+	var expectedFileList = `
+	{
+		"files": [
+			"src/index.js",
+			"src/config/config.js",
+			"src/utils/helpers.js",
+			"test/index.test.js",
+			".env.example",
+			"package.json",
+			"Dockerfile",
+			"README.md",
+			".gitignore"
+		]
+	}`
 
 	var expectedStructure = map[string]interface{}{
 		"src": map[string]interface{}{
@@ -119,21 +95,15 @@ func TestPipeline_Execute(t *testing.T) {
 		".gitignore":   nil,
 		"Dockerfile":   nil,
 		"README.md":    nil,
-		"file1":        nil,
-		"file2":        nil,
 	}
 
-	mockLLM.On("GenerateProjectDetails", mock.Anything).Return("Project details", nil)
-	mockLLM.On("GenerateFileTree", mock.Anything).Return("File tree", nil)
-	mockLLM.On("GenerateFileOperations", mock.Anything, mock.Anything).Return(expectedFileOperations, nil)
-	mockLLM.On("DetermineFileOrder", mock.Anything).Return([]string{"file1", "file2"}, nil)
-	mockLLM.On("GenerateFileContent", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("File content", nil)
-	mockLLM.On("GenerateReadmeContent", mock.Anything).Return("README content", nil)
-	mockLLM.On("GenerateGitignoreContent", mock.Anything).Return("Gitignore content", nil)
-	mockLLM.On("GenerateDockerfileContent", mock.Anything).Return("Dockerfile content", nil)
+	mockLLM.On("GetCompletion", mock.AnythingOfType("string"), "text").Return("Output", nil).Times(13)
+	mockLLM.On("GetCompletion", mock.AnythingOfType("string"), "json_object").Return(expectedFileOperations, nil).Once()
+	mockLLM.On("GetCompletion", mock.AnythingOfType("string"), "json_object").Return(expectedFileList, nil).Once()
+	mockLLM.On("GetCompletion", mock.AnythingOfType("string"), "json_object").Return(`{"package": "json"}`, nil).Once()
 
 	r := &Request{
-		ProjectDescription: "Test project description",
+		ProjectDescription: "description",
 		ProjectName:        "test-project",
 		GitRepo:            true,
 		GitIgnore:          true,
@@ -143,7 +113,6 @@ func TestPipeline_Execute(t *testing.T) {
 		ModelName:          "test-model",
 	}
 
-	// Use real FileSystem and StepPublisher
 	memFS := fs.NewMemoryFileSystem()
 	realPublisher := NewPublisher()
 
@@ -157,7 +126,6 @@ func TestPipeline_Execute(t *testing.T) {
 		publisher: realPublisher,
 	}
 
-	// Create a channel to receive steps
 	stepChan := make(chan StepType, 7)
 	go func() {
 		for step := range realPublisher.stepChan {
@@ -165,14 +133,12 @@ func TestPipeline_Execute(t *testing.T) {
 		}
 	}()
 
-	// Execute the pipeline in a goroutine
 	go func() {
 		err := pipeline.Execute(context.Background())
 		assert.NoError(t, err)
 		close(realPublisher.stepChan)
 	}()
 
-	// Wait for all steps to complete
 	expectedSteps := []StepType{
 		GenerateProjectDetails,
 		GenerateFileTree,
@@ -203,14 +169,9 @@ func TestPipeline_Execute(t *testing.T) {
 func TestPipeline_Cancel(t *testing.T) {
 	mockLLM := new(MockLLM)
 
-	mockLLM.On("GenerateProjectDetails", mock.Anything).Return("Project details", nil)
-	mockLLM.On("GenerateFileTree", mock.Anything).Return("File tree", nil)
-	mockLLM.On("GenerateFileOperations", mock.Anything, mock.Anything).Return([]fs.FileOperation{}, nil)
-	mockLLM.On("DetermineFileOrder", mock.Anything).Return([]string{"file1", "file2"}, nil)
-	mockLLM.On("GenerateFileContent", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return("File content", nil)
-	mockLLM.On("GenerateReadmeContent", mock.Anything).Return("README content", nil)
-	mockLLM.On("GenerateGitignoreContent", mock.Anything).Return("Gitignore content", nil)
-	mockLLM.On("GenerateDockerfileContent", mock.Anything).Return("Dockerfile content", nil)
+	mockLLM.On("GetCompletion", mock.AnythingOfType("string"), "text").Return("Project details", nil).Once()
+	mockLLM.On("GetCompletion", mock.AnythingOfType("string"), "text").Return("File tree", nil).Once()
+	mockLLM.On("GetCompletion", mock.AnythingOfType("string"), "json_object").Return(`{"operations": []}`, nil).Once()
 
 	r := &Request{
 		ProjectDescription: "Test project description",
@@ -255,7 +216,7 @@ func TestPipeline_Cancel(t *testing.T) {
 	time.Sleep(3 * time.Second)
 	cancel()
 
-	time.Sleep(500 * time.Millisecond) // Allow time for cancellation to propagate
+	time.Sleep(500 * time.Millisecond)
 
 	completedSteps := []StepType{}
 	for {
@@ -274,12 +235,5 @@ DoneCollecting:
 		assert.Equal(t, StepType(i), step, "Steps should be in order")
 	}
 
-	mockLLM.AssertNumberOfCalls(t, "GenerateProjectDetails", 1)
-	mockLLM.AssertNumberOfCalls(t, "GenerateFileTree", 1)
-	mockLLM.AssertNumberOfCalls(t, "GenerateFileOperations", 1)
-	mockLLM.AssertNumberOfCalls(t, "DetermineFileOrder", 0)
-	mockLLM.AssertNumberOfCalls(t, "GenerateFileContent", 0)
-	mockLLM.AssertNumberOfCalls(t, "GenerateReadmeContent", 0)
-	mockLLM.AssertNumberOfCalls(t, "GenerateGitignoreContent", 0)
-	mockLLM.AssertNumberOfCalls(t, "GenerateDockerfileContent", 0)
+	mockLLM.AssertNumberOfCalls(t, "GetCompletion", 3)
 }

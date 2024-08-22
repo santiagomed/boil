@@ -50,9 +50,9 @@ func TestLlmSequential(t *testing.T) {
 	}
 
 	cfg := LlmConfig{
-		OpenAIAPIKey: os.Getenv("OPENAI_API_KEY"),
-		ModelName:    "gpt-4o-mini",
-		BatchID:      "test-batch",
+		APIKey:    os.Getenv("OPENAI_API_KEY"),
+		ModelName: "gpt-4o-mini",
+		BatchID:   "test-batch",
 	}
 	llmClient, err := NewClient(&cfg, logger.NewNullLogger())
 	if err != nil {
@@ -76,7 +76,7 @@ func TestLlmSequential(t *testing.T) {
 	t.Log("Step 1: Generating Project Details")
 	projectDetails, err := cache.Get("project_details.md")
 	if err != nil {
-		projectDetails, err = llmClient.GenerateProjectDetails(projectDesc)
+		projectDetails, err = GenerateProjectDetails(llmClient, projectDesc)
 		if err != nil {
 			t.Fatalf("ProjectDetails error: %v", err)
 		}
@@ -90,7 +90,7 @@ func TestLlmSequential(t *testing.T) {
 	t.Log("Step 2: Generating File Tree")
 	fileTree, err := cache.Get("file_tree.txt")
 	if err != nil {
-		fileTree, err = llmClient.GenerateFileTree(projectDetails)
+		fileTree, err = GenerateFileTree(llmClient, projectDetails)
 		if err != nil {
 			t.Fatalf("FileTree error: %v", err)
 		}
@@ -105,7 +105,7 @@ func TestLlmSequential(t *testing.T) {
 	fileOrderStr, err := cache.Get("file_order.json")
 	var fileOrder []string
 	if err != nil {
-		fileOrder, err = llmClient.DetermineFileOrder(fileTree)
+		fileOrder, err = DetermineFileOrder(llmClient, fileTree)
 		if err != nil {
 			t.Fatalf("FileOrder error: %v", err)
 		}
@@ -124,7 +124,7 @@ func TestLlmSequential(t *testing.T) {
 	fileOperationsStr, err := cache.Get("file_operations.json")
 	var fileOperations []fs.FileOperation
 	if err != nil {
-		fileOperations, err = llmClient.GenerateFileOperations(projectDetails, fileTree)
+		fileOperations, err = GenerateFileOperations(llmClient, projectDetails, fileTree)
 		if err != nil {
 			t.Fatalf("FileOperations error: %v", err)
 		}
@@ -153,7 +153,7 @@ func TestLlmSequential(t *testing.T) {
 		fileContent, err := cache.Get(cacheFileName)
 
 		if err != nil {
-			fileContent, err = llmClient.GenerateFileContent(fileName, projectDetails, fileTree, fileContentMap)
+			fileContent, err = GenerateFileContent(llmClient, fileName, projectDetails, fileTree, fileContentMap)
 			if err != nil {
 				t.Fatalf("FileContent error for %s: %v", fileName, err)
 			}

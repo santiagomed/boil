@@ -57,10 +57,10 @@ func (e *Engine) worker(ctx context.Context) {
 		case req := <-e.requests:
 			r := req.Request
 			llmCfg := llm.LlmConfig{
-				OpenAIAPIKey: r.OpenAIAPIKey,
-				ModelName:    r.ModelName,
-				BatchID:      r.ProjectName,
-				TellmURL:     e.tellmURL,
+				APIKey:    r.OpenAIAPIKey,
+				ModelName: r.ModelName,
+				BatchID:   r.ProjectName,
+				TellmURL:  e.tellmURL,
 			}
 			llm, err := llm.NewClient(&llmCfg, e.logger)
 			if err != nil {
