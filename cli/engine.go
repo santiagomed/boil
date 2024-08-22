@@ -62,7 +62,7 @@ func (e *Engine) worker(ctx context.Context) {
 				BatchID:   r.ProjectName,
 				TellmURL:  e.tellmURL,
 			}
-			llm, err := llm.NewClient(&llmCfg, e.logger)
+			llm, err := llm.NewOpenAIClient(&llmCfg, e.logger)
 			if err != nil {
 				req.ResultChan <- err
 				close(req.ResultChan)

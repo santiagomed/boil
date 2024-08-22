@@ -54,7 +54,7 @@ func TestLlmSequential(t *testing.T) {
 		ModelName: "gpt-4o-mini",
 		BatchID:   "test-batch",
 	}
-	llmClient, err := NewClient(&cfg, logger.NewNullLogger())
+	llmClient, err := NewOpenAIClient(&cfg, logger.NewNullLogger())
 	if err != nil {
 		t.Fatalf("Error creating LLM client: %v", err)
 	}

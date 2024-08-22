@@ -11,7 +11,7 @@ import (
 )
 
 // Client represents an LLM client implementation
-type Client struct {
+type OpenAIClient struct {
 	openAIClient *openai.Client
 	config       *LlmConfig
 	tellmClient  *tellm.Client
@@ -19,13 +19,13 @@ type Client struct {
 }
 
 // NewClient creates a new LLM client
-func NewClient(cfg *LlmConfig, logger logger.Logger) (LlmClient, error) {
+func NewOpenAIClient(cfg *LlmConfig, logger logger.Logger) (LlmClient, error) {
 	if cfg.APIKey == "" {
 		return nil, errors.New("OpenAI API key is required")
 	}
 	openAIClient := openai.NewClient(cfg.APIKey)
 	tellmClient := tellm.NewClient(cfg.TellmURL)
-	return &Client{
+	return &OpenAIClient{
 		openAIClient: openAIClient,
 		config:       cfg,
 		tellmClient:  tellmClient,
@@ -34,7 +34,7 @@ func NewClient(cfg *LlmConfig, logger logger.Logger) (LlmClient, error) {
 }
 
 // getCompletion sends a request to the OpenAI API and returns the generated text
-func (c *Client) GetCompletion(prompt, responseType string) (string, error) {
+func (c *OpenAIClient) GetCompletion(prompt, responseType string) (string, error) {
 	resp, err := c.openAIClient.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
