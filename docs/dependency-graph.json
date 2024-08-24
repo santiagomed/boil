@@ -1,0 +1,81 @@
+{
+  "project": "WebApp",
+  "files": [
+    "src/main.js",
+    "src/utils/helper.js",
+    "src/components/Header.js",
+    "src/components/Logo.js",
+    "src/components/Nav.js",
+    "src/api/client.js",
+    "src/server/server.js",
+    "src/server/routes.js",
+    "config/webpack.config.js",
+    "package.json"
+  ],
+  "dependencies": {
+    "src/main.js": {
+      "internal": [
+        "src/utils/helper.js",
+        "src/components/Header.js",
+        "src/api/client.js"
+      ],
+      "external": ["react", "axios"]
+    },
+    "src/utils/helper.js": {
+      "internal": [],
+      "external": ["lodash"]
+    },
+    "src/components/Header.js": {
+      "internal": ["src/components/Logo.js", "src/components/Nav.js"],
+      "external": ["react-router-dom"]
+    },
+    "src/components/Logo.js": {
+      "internal": [],
+      "external": ["styled-components"]
+    },
+    "src/components/Nav.js": {
+      "internal": [],
+      "external": ["react"]
+    },
+    "src/api/client.js": {
+      "internal": [],
+      "external": ["axios", "jwt-decode"]
+    },
+    "src/server/server.js": {
+      "internal": ["src/server/routes.js"],
+      "external": ["express", "morgan", "cors"]
+    },
+    "src/server/routes.js": {
+      "internal": [],
+      "external": ["jsonwebtoken"]
+    },
+    "config/webpack.config.js": {
+      "internal": [],
+      "external": ["webpack", "webpack-cli", "html-webpack-plugin"]
+    },
+    "package.json": {
+      "internal": [],
+      "external": [
+        "All project dependencies listed here would typically be managed by npm or yarn"
+      ],
+      "meta": {
+        "note": "This isn't a file dependency but rather where external dependencies are declared."
+      }
+    }
+  },
+  "externalLibraries": {
+    "react": "18.2.0",
+    "axios": "1.4.0",
+    "lodash": "4.17.21",
+    "react-router-dom": "6.14.1",
+    "styled-components": "5.3.10",
+    "express": "4.18.2",
+    "morgan": "1.10.0",
+    "cors": "2.8.5",
+    "jsonwebtoken": "9.0.0",
+    "webpack": "5.88.2",
+    "webpack-cli": "5.1.4",
+    "html-webpack-plugin": "5.5.3",
+    "jwt-decode": "3.1.2"
+  }
+}

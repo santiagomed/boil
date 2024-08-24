@@ -59,7 +59,7 @@ Please provide a file tree structure that includes:
 4. Vital package files (e.g., package.json, go.mod, requirements.txt)
 
 Do NOT include:
-1. Package manager lock files (e.g., package-lock.json, yarn.lock)
+1. Package manager lock files (e.g., package-lock.json, yarn.lock, go.sum, Cargo.lock, etc.)
 2. Build output directories (e.g., /dist, /build)
 3. Dependency directories (e.g., /node_modules, /venv)
 4. IDE or editor-specific files or directories
