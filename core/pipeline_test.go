@@ -17,7 +17,7 @@ type MockLLM struct {
 }
 
 func (m *MockLLM) GetCompletion(prompt, responseType string) (string, error) {
-	time.Sleep(1 * time.Second)
+	time.Sleep(100 * time.Millisecond)
 	args := m.Called(prompt, responseType)
 	return args.String(0), args.Error(1)
 }
@@ -109,7 +109,7 @@ func TestPipeline_Execute(t *testing.T) {
 		GitIgnore:          true,
 		Dockerfile:         true,
 		Readme:             true,
-		OpenAIAPIKey:       "test-key",
+		APIKey:             "test-key",
 		ModelName:          "test-model",
 	}
 
@@ -180,7 +180,7 @@ func TestPipeline_Cancel(t *testing.T) {
 		GitIgnore:          true,
 		Dockerfile:         true,
 		Readme:             true,
-		OpenAIAPIKey:       "test-key",
+		APIKey:             "test-key",
 		ModelName:          "test-model",
 	}
 
@@ -213,10 +213,10 @@ func TestPipeline_Cancel(t *testing.T) {
 		close(realPublisher.stepChan)
 	}()
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(300 * time.Millisecond)
 	cancel()
 
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
 
 	completedSteps := []StepType{}
 	for {

@@ -124,6 +124,13 @@ func (a *AnthropicClient) GetCompletion(prompt, responseType string) (string, er
 	}
 
 	res := anthropicResp.Content[0].Text
+
+	if responseType == "json_object" {
+		if !json.Valid([]byte(res)) {
+			return "", fmt.Errorf("invalid JSON response from Anthropic")
+		}
+	}
+
 	err = a.tellmClient.Log(a.config.BatchID, prompt, res, a.config.ModelName, anthropicResp.Usage.InputTokens, anthropicResp.Usage.OutputTokens)
 	if err != nil {
 		a.logger.WithField("warning", err).Warn("failed to log to tellm")

@@ -324,7 +324,7 @@ func (m *generateCmdModel) handleProjectGeneration() tea.Cmd {
 				return err
 			}
 			return nil
-		case <-time.After(3 * time.Minute):
+		case <-time.After(5 * time.Minute):
 			m.logger.Error("Project generation timed out")
 			return errors.New("project generation timed out")
 		}

@@ -7,10 +7,6 @@ project_name: my-awesome-project
 openai_api_key: your-api-key-here
 model_name: gpt-4o-mini
 
-# Temporary Directory
-# Uncomment and modify if you want to specify a custom temp directory
-# temp_dir: /path/to/custom/temp/dir
-
 # Project Component Flags
 git_repo: true
 git_ignore: true

@@ -12,8 +12,8 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "boil",
-	Short: "Boil is a CLI tool for generating project boilerplate files",
-	Long:  `Boil is a powerful CLI tool that uses AI to generate custom project boilerplate files based on your description.`,
+	Short: "Boil is a tool for generating project boilerplate files",
+	Long:  `Boil is a powerful tool that uses AI to generate custom project boilerplate files based on your description.`,
 }
 
 var genCmd = &cobra.Command{

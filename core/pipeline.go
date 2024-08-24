@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/santiagomed/boil/fs"
-	"github.com/santiagomed/boil/llm"
 	"github.com/santiagomed/boil/logger"
 )
 
@@ -43,7 +42,7 @@ type Pipeline struct {
 	publisher   StepPublisher
 }
 
-func NewPipeline(r *Request, llm llm.LlmClient, sm StepManager, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
+func NewPipeline(r *Request, sm StepManager, pub StepPublisher, logger logger.Logger) (*Pipeline, error) {
 	return &Pipeline{
 		state: &State{
 			Request:       r,

@@ -57,19 +57,20 @@ func (e *Engine) worker(ctx context.Context) {
 		case req := <-e.requests:
 			r := req.Request
 			llmCfg := llm.LlmConfig{
-				APIKey:    r.OpenAIAPIKey,
+				APIKey:    r.APIKey,
 				ModelName: r.ModelName,
-				BatchID:   r.ProjectName,
+				BatchID:   llm.EnsureBatchID(r.ProjectName),
 				TellmURL:  e.tellmURL,
 			}
-			llm, err := llm.NewOpenAIClient(&llmCfg, e.logger)
+			llmOpenAI, err := llm.NewOpenAIClient(&llmCfg, e.logger)
 			if err != nil {
 				req.ResultChan <- err
 				close(req.ResultChan)
 				continue
 			}
-			stepManager := core.NewDefaultStepManager(llm, e.fs)
-			pipeline, err := core.NewPipeline(req.Request, llm, stepManager, e.pub, e.logger)
+
+			stepManager := core.NewDefaultStepManager(llmOpenAI, e.fs)
+			pipeline, err := core.NewPipeline(req.Request, stepManager, e.pub, e.logger)
 			if err != nil {
 				req.ResultChan <- err
 				close(req.ResultChan)

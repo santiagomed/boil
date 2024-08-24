@@ -11,8 +11,8 @@ type Request struct {
 	Readme             bool   `mapstructure:"readme"`
 	Dockerfile         bool   `mapstructure:"dockerfile"`
 
-	OpenAIAPIKey string `mapstructure:"openai_api_key"`
-	ModelName    string `mapstructure:"model_name"`
+	APIKey    string `mapstructure:"openai_api_key"`
+	ModelName string `mapstructure:"model_name"`
 }
 
 // DefaultRequest returns a Request with default values.
@@ -20,11 +20,20 @@ func DefaultRequest() *Request {
 	return &Request{
 		ProjectDescription: "Simple go 'Hello World' web app",
 		ProjectName:        "my-project",
-		OpenAIAPIKey:       os.Getenv("OPENAI_API_KEY"),
+		APIKey:             os.Getenv("OPENAI_API_KEY"),
 		ModelName:          "gpt-4o-mini",
 		GitRepo:            false,
 		GitIgnore:          false,
 		Readme:             false,
 		Dockerfile:         false,
+	}
+}
+
+func NewRequest(projectDescription, projectName, apiKey, modelName string) *Request {
+	return &Request{
+		ProjectDescription: projectDescription,
+		ProjectName:        projectName,
+		APIKey:             apiKey,
+		ModelName:          modelName,
 	}
 }
