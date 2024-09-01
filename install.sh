@@ -50,13 +50,16 @@ install_boil() {
 }
 
 # Main script
-if [ "$OSTYPE" = "darwin"* ] || [ "$OSTYPE" = "linux"* ]; then
-    detect_os_arch
-    install_boil
-else
-    echo "This script is for macOS and Linux only. For Windows, please use the PowerShell script."
-    exit 1
-fi
+case "$OSTYPE" in
+    darwin*|linux*)
+        detect_os_arch
+        install_boil
+        ;;
+    *)
+        echo "This script is for macOS and Linux only. For Windows, please use the PowerShell script."
+        exit 1
+        ;;
+esac
 
 echo "Installation complete. You can now use boil by running 'boil' in your terminal."
 echo "If 'boil' is not recognized, please restart your terminal or source your shell's config file."
