@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/list"
+	"github.com/santiagomed/boil/config"
 	"github.com/santiagomed/boil/core"
 	"github.com/santiagomed/boil/fs"
 	"github.com/santiagomed/boil/logger"
@@ -64,7 +67,27 @@ func newGenerateModel(f genFlags) (generateCmdModel, error) {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("202"))
 
-	req := core.DefaultRequest()
+	var req *core.Request
+	var err error
+
+	if f.config != "" || f.config == "" {
+		configPath := f.config
+		if configPath == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return generateCmdModel{}, fmt.Errorf("error getting user home directory: %w", err)
+			}
+			configPath = filepath.Join(home, ".boil", "config.yaml")
+		}
+
+		req, err = config.LoadConfig(configPath)
+		if err != nil {
+			return generateCmdModel{}, fmt.Errorf("error loading config: %w", err)
+		}
+	} else {
+		req = core.DefaultRequest()
+	}
+
 	if f.name != "" {
 		req.ProjectName = f.name
 	}

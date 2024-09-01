@@ -50,7 +50,7 @@ install_boil() {
 }
 
 # Main script
-if [[ "$OSTYPE" == "darwin"* ]] || [[ "$OSTYPE" == "linux"* ]]; then
+if [ "$OSTYPE" = "darwin"* ] || [ "$OSTYPE" = "linux"* ]; then
     detect_os_arch
     install_boil
 else

@@ -29,11 +29,15 @@ func DefaultRequest() *Request {
 	}
 }
 
-func NewRequest(projectDescription, projectName, apiKey, modelName string) *Request {
+func NewRequest(projectDescription, projectName, apiKey, modelName string, gitRepo, gitIgnore, readme, dockerfile bool) *Request {
 	return &Request{
 		ProjectDescription: projectDescription,
 		ProjectName:        projectName,
 		APIKey:             apiKey,
 		ModelName:          modelName,
+		GitRepo:            gitRepo,
+		GitIgnore:          gitIgnore,
+		Readme:             readme,
+		Dockerfile:         dockerfile,
 	}
 }
