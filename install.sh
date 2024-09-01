@@ -2,10 +2,11 @@
 
 set -e
 
+OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+ARCH=$(uname -m)
+
 # Function to detect OS and architecture
 detect_os_arch() {
-    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
-    ARCH=$(uname -m)
     case $ARCH in
         x86_64) ARCH="x86_64" ;;
         aarch64 | arm64) ARCH="arm64" ;;
@@ -50,7 +51,7 @@ install_boil() {
 }
 
 # Main script
-case "$OSTYPE" in
+case "$OS" in
     darwin*|linux*)
         detect_os_arch
         install_boil
